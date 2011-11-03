@@ -1,6 +1,11 @@
 require "rbconfig"
 require "pathname"
 
+
+require "pp"
+
+
+
 class Optout
   VERSION = "0.01"
 
@@ -66,7 +71,6 @@ class Optout
     #    # Creates: ["--prefix=/sshaw/lib", "libssl2"]
     #
 
-    # block req
     def options(config = {}, &block)
       optout = new(config)
       optout.instance_eval(&block) if block_given?
@@ -74,15 +78,6 @@ class Optout
     end
 
     alias :keys :options
-
-    def const_missing(name)
-      if name == "File" || name == "Dir"
-        p "Missing #{name}"
-        const_get("Validator::#{name}").new
-      else
-        super
-      end
-    end
   end
 
   def initialize(args = {})
@@ -185,8 +180,6 @@ class Optout
     attr :value
     attr :index
 
-    QUOTE = RbConfig::CONFIG["host_os"] =~ /mswin|mingw/i ? "\"" : "'"
-
     def self.create(key, *args)
       options = Hash === args.last ? args.pop : {}
       switch  = args.shift
@@ -198,18 +191,12 @@ class Optout
           @value  = v.shift || options[:default]
           @joinon = String === options[:multiple] ? options[:multiple] : ","
           @index  = options[:index].to_i
-
-          # Check for: "--[without]-feature-x"
-
-          # If a switch ends with "=" we require an arg and make sure
-          # that there's no space between the switch and its arg.
-          eq_switch  = !!(@switch =~ /\w=\z/)
-          @separator = eq_switch ? "" : options[:arg_separator] || " "
-          required   = options.include?(:required) ? options[:required] : eq_switch
+          @separator = options[:arg_separator] || " "
 
           @validators = []
-          @validators << Validator::Required.new(required)
+          @validators << Validator::Required.new(options[:required])
           @validators << Validator::Multiple.new(options[:multiple])
+
           # Could be an Array..?
           @validators << Validator.for(options[:validator]) if options[:validator]
         end
@@ -217,21 +204,25 @@ class Optout
     end
 
     def to_s
-      opt = to_a
-      opt[1] = quote(opt[1]) if opt[1] =~ /\s/
+      opt = create_opt_array
+      if opt.any?
+        if opt.size == 1
+          opt[0] = quote(opt[0]) unless @switch
+        else
+          opt[1] = quote(opt[1])
+        end
+      end
       opt.join(@separator)
     end
 
     def to_a
-      opt = []
-      # if eq_switch or arg_sep is blank we want a 1 element Array -right?
-      opt << @switch if @switch && @value
-      opt << normalize(@value) if @value && @value != true       # Only include @value for non-boolean options
+      opt = create_opt_array
+      opt = [ opt.join(@separator) ] if blank_separator?
       opt
     end
 
     def empty?
-      @value.to_s.empty?
+      !@value || @value.to_s.empty?
     end
 
     def validate!
@@ -239,10 +230,30 @@ class Optout
     end
 
     private
+    def create_opt_array
+      opt = []
+      opt << @switch if @switch && @value
+      opt << normalize(@value) if !empty? && @value != true       # Only include @value for non-boolean options
+      opt
+    end
+
+    def blank_separator?
+      @separator.gsub(/\s+/, "").empty?
+    end
+
     # bob's     = bob\'s
     # bob's big = 'bob'\''s big'
     def quote(value)
-      sprintf "%s%s%s", QUOTE, value.gsub(QUOTE) { "\\#{QUOTE}" }, QUOTE
+      if unix?
+        # For --opt=n we dont always want to quote!
+        sprintf "'%s'", value.gsub("'") { "'\\''" }
+      else
+        %|"#{value}"|
+      end
+    end
+
+    def unix?
+      RbConfig::CONFIG["host_os"] !~ /mswin|mingw/i
     end
 
     def normalize(value)
@@ -257,7 +268,7 @@ class Optout
       else
         # Load based on setting's name or the name of its class
         validator = setting.class.name
-        if validator == "Class" &&
+        if validator == "Class"
           name = setting.name.split("::", 2)
           validator = name[1] if name[1] && name[0] == "Optout"
         end

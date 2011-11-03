@@ -21,15 +21,15 @@ Validate an option hash and turn it into something suitable to pass to `exec()` 
       :user => true
     }
 
-    `gem #{optout.shell(options)}`
-    # Returns: "install rake --platform mswin -v 0.9.2 --user-install"
-
     exec "gem", *optout.argv(options)
     # Returns: ["install", "rake", "--platform", "mswin", "-v", "0.9.2", "--user-install"]
 
+    `gem #{optout.shell(options)}`
+    # Returns: "'install' 'rake' --platform 'mswin' -v '0.9.2' --user-install"
+
 ## Install
 
-Sorry, no gemspec yet... in process of extracting from a larger project.
+Sorry, no gem yet... in process of extracting (and enhancing) from a larger project.
 
 ## Author
 

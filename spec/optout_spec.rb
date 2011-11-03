@@ -2,8 +2,13 @@ require "optout"
 require "tempfile"
 require "fileutils"
 
-def options_class
-  Optout::Option.create(:x, "-x")
+def option_class(*args)
+  options = Hash === args.last ? args.pop : {}
+  switch = args.shift
+  klass = Optout::Option.create(:x, switch, options)
+  # Need mocha to stub this?
+  klass.class_eval { def unix?; true; end }
+  klass
 end
 
 describe Optout do
@@ -68,83 +73,84 @@ describe Optout::Option do
     end
   end
 
-  context "creating the option string" do
+  context "creating options as a String" do
     it "should only output the switch if its value is true" do
       klass = Optout::Option.create(:x, "-x")
       opt = klass.new
-      opt.to_s.should == ""
+      opt.to_s.should eql("")
       opt = klass.new(false)
-      opt.to_s.should == ""
+      opt.to_s.should eql("")
       #opt = @klass.new(99)
       #opt.to_s.should == ""
       opt = klass.new(true)
-      opt.to_s.should == "-x"
+      opt.to_s.should eql("-x")
     end
 
     it "should only output the switch with its argument if the value is not a boolean" do
-      klass = Optout::Option.create(:x, "-x")
-      klass.new(123).to_s.should == "-x 123"
+      klass = option_class("-x")
+      klass.new(123).to_s.should eql("-x '123'")
     end
 
     it "should only output the value if there's no switch" do
-      klass = Optout::Option.create(:x)
-      klass.new("123").to_s.should == "123"
+      klass = option_class
+      klass.new("123").to_s.should == "'123'"
     end
 
     it "should use the default if no value is given" do
-      klass = Optout::Option.create(:x, "-x", :default => 69)
-      klass.new.to_s.should == "-x 69"
-      klass.new(123).to_s.should == "-x 123"
+      klass = option_class("-x", :default => 69)
+      klass.new.to_s.should eql("-x '69'")
+      klass.new(123).to_s.should eql("-x '123'")
     end
 
     it "should separate the option from its value with an alternate character" do
-      klass = Optout::Option.create(:x, "-x", :arg_separator => ":")
-      klass.new(123).to_s.should eql("-x:123")
+      klass = option_class("-x", :arg_separator => ":")
+      klass.new(123).to_s.should eql("-x:'123'")
     end
 
-    it "should concatinate the value if it's an array" do
-      klass = Optout::Option.create(:x, "-x")
-      klass.new(%w|A B C|).to_s.should eql("-x A,B,C")
-      klass = Optout::Option.create(:x, "-x", :multiple => ":")
-      klass.new(%w|A B C|).to_s.should eql("-x A:B:C")
+    it "should concatenate the value if it's an array" do
+      klass = option_class("-x")
+      klass.new(%w|A B C|).to_s.should eql("-x 'A,B,C'")
+      klass = option_class("-x", :multiple => ":")
+      klass.new(%w|A B C|).to_s.should eql("-x 'A:B:C'")
     end
 
-    it "should quote a value with spaces that aren't leading/trailing" do
-      klass = Optout::Option.create(:x, "-x")
-      klass.new(" a ").to_s.should eql("-x a")
-      klass.new("a b c").to_s.should eql("-x 'a b c'")
+    context "on a machine running a Unix based OS" do
+      it "should escape single quotes in a value" do
+        klass = option_class("-x")
+        klass.new("' a'b'c '").to_s.should == %q|-x ''\'' a'\''b'\''c '\'''|
+      end
+
+      it "should always use single quotes to quote the value" do
+        klass = option_class("-x")
+        klass.new(" a ").to_s.should eql("-x 'a'")
+        klass.new("a b c").to_s.should eql("-x 'a b c'")
+      end
     end
 
-    # This is not correct.. see bash
-    it "should escape quotes in a value" do
-      klass = Optout::Option.create(:x, "-x")
-      klass.new("'a'b'c'").to_s.should == %|-x \'a\'b\'c\'|
+    context "on a machine running Windows" do
+      it "should always use double quotes to quote the value" do
+        klass = option_class("-x")
+        klass.class_eval {  def unix?; false; end }
+        klass.new("a b c").to_s.should eql('-x "a b c"')
+      end
+
     end
   end
 
   context "validating the option" do
     it "should raise an OptionRequired error if there's no value and one's required" do
-      klass = Optout::Option.create(:x)
+      klass = option_class
       proc { klass.new.validate! }.should_not raise_exception
-      klass = Optout::Option.create(:x, :required => true)
+      klass = option_class(:required => true)
       proc { klass.new(123).validate! }.should_not raise_exception
       proc { klass.new.validate! }.should raise_exception(Optout::OptionRequired)
-    end
-
-    it "should raise an OptionRequired error if there's no value and the switch ends with a '='" do
-      klass = Optout::Option.create(:x, "--x=")
-      proc { klass.new(123).validate! }.should_not raise_exception
-      proc { klass.new.validate! }.should raise_exception(Optout::OptionRequired)
-      # Separate spec for this?
-      klass = Optout::Option.create(:x, "--x=", :required => false)
-      proc { klass.new.validate! }.should_not raise_exception
     end
 
     # need to check multiple's default value
     it "should raise an OptionInvalid error if multiple values are given when they're not allowed" do
-      klass = Optout::Option.create(:x)
+      klass = option_class
       proc { klass.new.validate! }.should_not raise_exception
-      klass = Optout::Option.create(:x, :multiple => false)
+      klass = option_class(:multiple => false)
       proc { klass.new(123).validate! }.should_not raise_exception
       proc { klass.new(%w|A B|).validate! }.should raise_exception(Optout::OptionInvalid)
     end
@@ -155,7 +161,7 @@ describe Optout::Option do
           raise "raise up!"
         end
       end
-      klass = Optout::Option.create(:x, :validator => v.new)
+      klass = option_class(:validator => v.new)
       proc { klass.new.validate! }.should raise_exception(RuntimeError, "raise up!")
     end
   end
@@ -327,24 +333,24 @@ end
 
 describe Optout::Validator::Class do
   it "should raise an exception if the value is not of the specified Class" do
-    opt = options_class.new("x")
+    opt = option_class.new("x")
     v = Optout::Validator::Class.new(Float)
     proc { v.validate!(opt) }.should raise_exception(Optout::OptionInvalid)
-    opt = options_class.new(1.12)
+    opt = option_class.new(1.12)
     proc { v.validate!(opt) }.should_not raise_exception
   end
 end
 
 describe Optout::Validator::Boolean do
   it "should raise an exception if the value is not boolean or nil" do
-    opt = options_class.new("x")
+    opt = option_class.new("x")
     v = Optout::Validator::Boolean.new
     proc { v.validate!(opt) }.should raise_exception(Optout::OptionInvalid)
-    opt = options_class.new(nil)
+    opt = option_class.new(nil)
     proc { v.validate!(opt) }.should_not raise_exception
-    opt = options_class.new(true)
+    opt = option_class.new(true)
     proc { v.validate!(opt) }.should_not raise_exception
-    opt = options_class.new(false)
+    opt = option_class.new(false)
   end
 end
 
