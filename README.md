@@ -1,6 +1,6 @@
 # Optout
 
-Validate an option hash and turn it into something suitable to pass to `exec()` and `system()` like functions.
+Validate an option hash and turn it into something appropriate for `exec()` and `system()` like functions.
 
 ## Overview
 
@@ -12,6 +12,7 @@ Validate an option hash and turn it into something suitable to pass to `exec()` 
       on :os, "--platform", %w|mswin cygwin mingw|
       on :version, "-v", /\A\d+(\.\d+)*\z/
       on :user, "--user-install"
+      on :location, "-i", Optout::Dir.exists.under(ENV["HOME"])
     end
 
     options = {

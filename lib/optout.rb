@@ -1,13 +1,8 @@
 require "rbconfig"
 require "pathname"
 
-
-require "pp"
-
-
-
 class Optout
-  VERSION = "0.01"
+  VERSION = "0.0.1"
 
   class OptionError < StandardError
     attr :key
@@ -31,21 +26,28 @@ class Optout
 
   class OptionInvalid < OptionError
     def initialize(key, message)
-      super(key, "option invalid: '#{key}'; #{message}")
+      super(key, "option invalid: #{key}; #{message}")
     end
   end
 
   class << self
-
     ##
-    # Define a set of options to create
+    # Define a set of options to validate and create.
     #
     # === Parameters
-    # [config     (Hash)] Configuration information
+    #
+    # [config     (Hash)] Configuration options
     # [definition (Proc)] Option definitions
     #
     # === Options
     #
+    # [:assert_valid_keys] If true an +OptionUnknown+ error will be raised when the incoming option hash contains a key that has not been associated with an option.
+    #                      Defaults to +true+.
+    # [:required]         If true the option must contian a value i.e., it must not be +false+ or +nil+
+    #
+    # === Errors
+    #
+    #  A call to +on+ inside of a block can raise an +ArgumentError+.
     #
     # === Examples
     #
@@ -56,19 +58,19 @@ class Optout
     #    end
     #
     #    optz.shell(:all => true, :size => 1024, :file => "/home/sshaw/some file")
-    #    # Creates: "-a -b 1024 '/home/sshaw/some file'
+    #    # Creates: "-a -b '1024' '/home/sshaw/some file'
     #
     #    optz = Optout.options :required => true, :assert_valid_keys => false do
-    #      on :lib, :index => 1
-    #      on :prefix, "--prefix=" , %w{/sshaw/lib /sshaw/usr/lib}
+    #      on :lib, :index => 2
+    #      on :prefix, "--prefix" , %w{/sshaw/lib /sshaw/usr/lib}, :arg_separator => "="
     #    end
     #
     #    optz.argv(:lib      => "libssl2",
-    #              :prefix   => "/sshaw/home/lib",
+    #              :prefix   => "/sshaw/usr/lib",
     #              :bad_key  => "No error raised because of moi")
     #
     #
-    #    # Creates: ["--prefix=/sshaw/lib", "libssl2"]
+    #    # Creates: ["--prefix='/sshaw/lib'", "libssl2"]
     #
 
     def options(config = {}, &block)
@@ -94,23 +96,26 @@ class Optout
   # Define an option
   #
   # === Parameters
-  # [key    (Symbol)] The hash key used for this option
-  # [switch (String)] The command line switch for this option
-  # [rule   (String)] A validations rule
+  #
+  # [key     (Symbol)] The key used in the option hash
+  # [switch  (String)] Command line switch that will be created
+  # [rule    (String)] Validation rule
+  # [options   (Hash)] Additional option configuration
   #
   # === Options
-  # required
   #
+  # [:required]         If true the option must contian a value i.e., it must not be +false+ or +nil+
+  # [:multiple]         If true multiple values will be allowed, set to a +String+ to join multiple values on it
+  # [:default]          Specify a default value, this will be used if the option in +nil+
+  # [:arg_separator]    +String+ used to seperate the switch from its value
+
+  # [:index]            The in the resulting option String or Array
   #
   # === Errors
+  #
   # An +ArgumentError+ is raised if:
   # * +key+ is +nil+
   # * +key+ has already been defined
-  #
-  # === Examples
-  #
-  #
-  #
 
   def on(*args)
     key = args.shift
@@ -120,30 +125,35 @@ class Optout
     raise ArgumentError, "option key required" if key.nil?
     raise ArgumentError, "option already defined: '#{key}'" if @options[key]
 
-    opt_options = Hash === args.last ? args.pop : {}
-    opt_options.merge!(@default_opt_options)
+    opt_options = Hash === args.last ? @default_opt_options.merge(args.pop) : {}
     opt_options[:index] ||= @options.size
     opt_options[:validator] = args.shift
 
     @options[key] = Option.create(key, switch, opt_options)
   end
 
-
   ##
-  # Create an argument string that can be to passed to a +system()+ like method
+  # Create an argument string that can be to passed to a +system()+ like function.
+  # If an option contains a value the will be quoted.
   #
   # === Parameters
-  # [options (Hash)] The options hash used to construct the argument string
+  # [options (Hash)] The option hash used to construct the argument string
   #
   # === Returns
   # [String] The argument string
+  #
+  # === Errors
+  # The following +OptionError+ errors will be raised:
+  # +OptionRequired+ The option hash is missing a required value
+  # +OptionUnknown+  The option hash contains an unknown key
+  # +OptionInvalid+  The option hash contains a value the does not conform to the defined specification
   #
   def shell(options = {})
     create_options(options).map { |opt| opt.to_s }.join " "
   end
 
   ##
-  # Create an +argv+ array that can be to passed to an +exec()+ like method
+  # Create an +argv+ array that can be to passed to an +exec()+ like function
   #
   # === Parameters
   # [options (Hash)] The options hash used to construct an +argv+ array
@@ -180,6 +190,22 @@ class Optout
     attr :value
     attr :index
 
+    ##
+    # Create an option class
+    #
+    # === Parameters
+    # [key     (Symbol)] Hash key
+    # [options (Hash)]
+    #
+    # === Examples
+    #
+    #    MyOption = Optout::Option.create(:quality, "-q", :arg_separator => "=", :validator => Fixnum)
+    #    opt = MyOption.new(75)
+    #    opt.empty?
+    #    opt.validate!
+    #    opt.to_s  # "-q='75'"
+    #
+
     def self.create(key, *args)
       options = Hash === args.last ? args.pop : {}
       switch  = args.shift
@@ -203,6 +229,15 @@ class Optout
       end
     end
 
+    ##
+    # Turn the option into a string that can be to passed to a +system()+ like function
+    #
+    # === Examples
+    #
+    #    MyOption = Optout::Option.create(:level, "-L", %w|fatal info warn debug|)
+    #    MyOption.new("debug").to_s
+    #    # Returns: "-L 'debug'"
+    #
     def to_s
       opt = create_opt_array
       if opt.any?
@@ -215,15 +250,38 @@ class Optout
       opt.join(@separator)
     end
 
+    ##
+    # Turn the option into a array that can be passed to a +exec()+ like function
+    #
+    # === Examples
+    #
+    #    MyOption = Optout::Option.create(:level, "-L", %w|fatal info warn debug|)
+    #    MyOption.new("debug").to_a
+    #    # Returns: [ "-L, "debug" ]
+    #
+
     def to_a
       opt = create_opt_array
-      opt = [ opt.join(@separator) ] if blank_separator?
+      opt = [ opt.join(@separator) ] unless @separator =~ /\A\s+\z/
       opt
     end
+
+    ##
+    # Check if the option contains a value
+    #
+    # === Returns
+    #
+    # +false+ if the option's value is +false+ or +nil+, +true+ otherwise.
 
     def empty?
       !@value || @value.to_s.empty?
     end
+
+    ##
+    # Validate the option
+    #
+    # === Errors
+    #
 
     def validate!
       @validators.each { |v| v.validate!(self) }
@@ -237,15 +295,8 @@ class Optout
       opt
     end
 
-    def blank_separator?
-      @separator.gsub(/\s+/, "").empty?
-    end
-
-    # bob's     = bob\'s
-    # bob's big = 'bob'\''s big'
     def quote(value)
       if unix?
-        # For --opt=n we dont always want to quote!
         sprintf "'%s'", value.gsub("'") { "'\\''" }
       else
         %|"#{value}"|
@@ -284,7 +335,7 @@ class Optout
     Base = Struct.new :setting
 
     # Check for multiple values
-    class Multiple < Base
+    class Multiple < Base  ##
       def validate!(opt)
         if !opt.empty? && opt.value.respond_to?(:join) && opt.value.size > 1 && !multiple_values_allowed?
           raise OptionInvalid.new(opt.key, "multiple values are not allowed")
@@ -362,19 +413,21 @@ class Optout
       end
 
       def validate!(opt)
+        return if opt.empty?
+
         @file = Pathname.new(opt.value.to_s)
-        what  = self.class.name.split("::")[-1]
+        what  = self.class.name.split("::")[-1].downcase
         error = case
                 when !under?
-                  "#{what} must be under #{@under}"
+                  "#{what} must be under '#{@under}'"
                 when !named?
                   "#{what} name must match '#{@named}'"
                 when !permissions?
                   "#{what} must have user permission of #{@permissions}"
                 when !exists?
-                  "'#{@file}' does not exist"
+                  "#{what} '#{@file}' does not exist"
                 when !creatable?
-                  "can't create #{what.downcase} '#{@file}'"
+                  "can't create a #{what} at '#{@file}'"
                 end
         raise OptionInvalid.new(opt.key, error) if error
       end
@@ -397,7 +450,7 @@ class Optout
       def named?
         basename = @file.basename.to_s
         !@named ||
-        (Regexp === @named ?
+        (::Regexp === @named ?
           basename =~ @named :
           basename == @named)
       end
@@ -405,9 +458,9 @@ class Optout
       def under?
         !@under ||
         exists? &&
-        (Regexp === @under ?
+        (::Regexp === @under ?
           @under =~ /\A#{::Regexp.quote(@file.parent.expand_path.to_s)}/ :
-          @under == @file.parent.expand_path.to_s)
+          @file.parent.expand_path.to_s == ::File.expand_path(@under))
       end
 
       def creatable?

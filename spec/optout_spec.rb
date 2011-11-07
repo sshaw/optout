@@ -73,8 +73,8 @@ describe Optout::Option do
     end
   end
 
-  context "creating options as a String" do
-    it "should only output the switch if its value is true" do
+  context "creating an option String" do
+    it "should only output the switch if the value is true" do
       klass = Optout::Option.create(:x, "-x")
       opt = klass.new
       opt.to_s.should eql("")
@@ -133,7 +133,34 @@ describe Optout::Option do
         klass.class_eval {  def unix?; false; end }
         klass.new("a b c").to_s.should eql('-x "a b c"')
       end
+    end
+  end
 
+  context "creating an option Array" do
+    it "should only output the switch with its argument if the value is not a boolean" do
+      klass = option_class("-x")
+      klass.new(123).to_a.should eql(["-x", "123"])
+    end
+
+    it "should only output the value if there's no switch" do
+      klass = option_class
+      klass.new("123").to_a.should eql(["123"])
+    end
+
+    it "should use the default if no value is given" do
+      klass = option_class("-x", :default => 69)
+      klass.new.to_a.should eql(["-x", "69"])
+      klass.new(123).to_a.should eql(["-x", "123"])
+    end
+
+    it "should create a one element array if the arg_separator is not white space" do
+      klass = option_class("-x", :arg_separator => ":")
+      klass.new(123).to_a.should eql(["-x:123"])
+    end
+
+    it "should not quote the value" do
+      klass = option_class("-x")
+      klass.new("a b c").to_a.should eql(["-x", "a b c"])
     end
   end
 
@@ -217,21 +244,21 @@ end
 shared_examples_for "something that validates files" do
   before do
     @tmpdir = Dir.mktmpdir
-    @klass = Optout::Option.create(:x)
+    @klass = option_class
   end
 
   after { FileUtils.rm_rf(@tmpdir) }
 
   # Each ex needs @validator, @file and @opt
   context "validating permissions" do
-    it "should raise an exception when they don't match the specified permissions" do
+    it "should raise an exception when they don't match the specified user permissions" do
       path = @opt.value
       FileUtils.chmod(0100, path)
       @validator.permissions("r")
       proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /user permission/)
     end
 
-    it "should not raise an exception when they match the specified permissions" do
+    it "should not raise an exception when they match the specified user permissions" do
       path = @opt.value
       FileUtils.chmod(0100, path)
       @validator.permissions("x")
@@ -271,6 +298,7 @@ shared_examples_for "something that validates files" do
   end
 
   # Check regex
+  # Need to test with relative paths
   context "validating location" do
     it "should not raise an exception if under the specified parent directory" do
       @validator.under(@tmpdir)
@@ -279,22 +307,32 @@ shared_examples_for "something that validates files" do
 
     it "should raise an exception if not under the specified parent directory" do
       @validator.under("/wrong")
-      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid)
+      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /must be under/)
     end
   end
 
-  # Regex here too..
   context "validating basename" do
-    it "should not raise an exception if it matches the specified basename" do
+    it "should not raise an exception if it equals the specified basename String" do
       @validator.named(File.basename(@file.path))
       proc { @validator.validate!(@opt) }.should_not raise_exception
     end
 
-    it "should raise an exception if it does not match the specified basename" do
-      @validator.named("bad")
-      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid)
+    it "should raise an exception if it does not equal the specified basename String" do
+      @validator.named("__bad__")
+      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /name must match/)
     end
-  end
+
+    it "should not raise an exception if it matches the specified Regexp" do
+      ends_with = File.basename(@file.path)[/.{2}\z/]
+      @validator.named(/#{Regexp.quote(ends_with)}\z/)
+      proc { @validator.validate!(@opt) }.should_not raise_exception
+    end
+
+    it "should raise an exception if it does not match the specified Regexp" do
+      @validator.named(/\A-_-_-_/)
+      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /name must match/)
+    end
+end
 end
 
 describe Optout::Validator do
@@ -362,6 +400,10 @@ describe Optout::Validator::File do
     @opt = @klass.new(@file.path)
     @validator = Optout::Validator::File.new
   end
+
+#   it "should raise an exception if the file is a directory" do
+#     proc {  @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid)
+#   end
 end
 
 describe Optout::Validator::Dir do
