@@ -12,9 +12,9 @@ def option_class(*args)
 end
 
 describe Optout do
-  context "defining options" do
-    before {  @optout = Optout.new }
+  before {  @optout = Optout.new }
 
+  context "defining options" do
     it "should require the option's key" do
       proc { @optout.on }.should raise_exception(ArgumentError, /option key required/)
     end
@@ -23,7 +23,54 @@ describe Optout do
       @optout.on :x
       proc { @optout.on :x }.should raise_exception(ArgumentError, /already defined/)
     end
+  end
 
+  context "creating options" do 
+    it "should raise an exception if the option hash contains an unknown key" do
+      optout = Optout.new      
+      optout.on :x
+      proc { optout.argv(:bad => 123) }.should raise_exception(Optout::OptionUnknown)   
+    end
+
+    it "should not raise an exception if the option hash contains an unknown key" do
+      optout = Optout.new :assert_valid_keys => false
+      optout.on :x
+      proc { optout.argv(:bad => 123) }.should_not raise_exception
+    end
+
+    it "should not require any options" do
+      optout = Optout.new 
+      optout.on :x
+      proc { optout.argv({}) }.should_not raise_exception
+    end
+
+    it "should require all options" do
+      optout = Optout.new :required => true
+      optout.on :x
+      proc { optout.argv({}) }.should raise_exception(Optout::OptionRequired)    
+    end
+  end
+
+
+  context "as a string" do 
+    it "should match" do 
+      @optout.on :x, "-x"
+      @optout.on :y, "-y"
+      @optout.on :z, "-z"
+      options = { :x => true, :y => true, :z => true }
+      @optout.shell(options).should eql('-x -y -z')    
+    end
+
+    it "should match" do 
+      @optout.on :x, "-x"
+      @optout.on :y, "-y", :default => 2
+      @optout.on :z, "-z"
+      options = { :x => 1, :z => "a b"  }
+      @optout.shell(options).should eql(%q|-x '1' -y '2' -z 'a b'|)    
+    end
+  end
+
+  context "creating an array options" do 
     it "should return the options as an Array of Strings" do
       @optout.on :x, "-x"
       argv = @optout.argv(:x => true)

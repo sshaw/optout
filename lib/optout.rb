@@ -41,13 +41,13 @@ class Optout
     #
     # === Options
     #
-    # [:assert_valid_keys] If true an +OptionUnknown+ error will be raised when the incoming option hash contains a key that has not been associated with an option.
+    # [:assert_valid_keys] If +true+ an +OptionUnknown+ error will be raised when the incoming option hash contains a key that has not been associated with an option.
     #                      Defaults to +true+.
-    # [:required]         If true the option must contian a value i.e., it must not be +false+ or +nil+
+    # [:required]         Sets the default for subsequent options defined via +on()+. See XXX
     #
     # === Errors
     #
-    #  A call to +on+ inside of a block can raise an +ArgumentError+.
+    # A call to +on+ from inside a block can raise an +ArgumentError+.
     #
     # === Examples
     #
@@ -70,7 +70,7 @@ class Optout
     #              :bad_key  => "No error raised because of moi")
     #
     #
-    #    # Creates: ["--prefix='/sshaw/lib'", "libssl2"]
+    #    # Creates: ["--prefix='/sshaw/usr/lib'", "libssl2"]
     #
 
     def options(config = {}, &block)
@@ -88,6 +88,7 @@ class Optout
     #@opt_seperator = args[:opt_seperator]
     @default_opt_options = {
       :required => args[:required],
+      :multiple => args[:multiple],
       :arg_separator => args[:arg_separator]
     }
   end
@@ -98,24 +99,19 @@ class Optout
   # === Parameters
   #
   # [key     (Symbol)] The key used in the option hash
-  # [switch  (String)] Command line switch that will be created
+  # [switch  (String)] Optional. The command line switch that will be created. If no switch is given only the option's value is output.
   # [rule    (String)] Validation rule
   # [options   (Hash)] Additional option configuration
   #
   # === Options
   #
-  # [:required]         If true the option must contian a value i.e., it must not be +false+ or +nil+
-  # [:multiple]         If true multiple values will be allowed, set to a +String+ to join multiple values on it
-  # [:default]          Specify a default value, this will be used if the option in +nil+
-  # [:arg_separator]    +String+ used to seperate the switch from its value
-
-  # [:index]            The in the resulting option String or Array
+  # [:index]            The index of the option in the resulting String or Array
   #
   # === Errors
   #
-  # An +ArgumentError+ is raised if:
-  # * +key+ is +nil+
-  # * +key+ has already been defined
+  # [ArgumentError] An +ArgumentError+ is raised if:
+  #		    * +key+ is +nil+
+  #		    * +key+ has already been defined
 
   def on(*args)
     key = args.shift
@@ -125,7 +121,7 @@ class Optout
     raise ArgumentError, "option key required" if key.nil?
     raise ArgumentError, "option already defined: '#{key}'" if @options[key]
 
-    opt_options = Hash === args.last ? @default_opt_options.merge(args.pop) : {}
+    opt_options = Hash === args.last ? @default_opt_options.merge(args.pop) : @default_opt_options.dup
     opt_options[:index] ||= @options.size
     opt_options[:validator] = args.shift
 
@@ -133,8 +129,7 @@ class Optout
   end
 
   ##
-  # Create an argument string that can be to passed to a +system()+ like function.
-  # If an option contains a value the will be quoted.
+  # Create an argument string that can be to passed to a +system+ like function.
   #
   # === Parameters
   # [options (Hash)] The option hash used to construct the argument string
@@ -143,20 +138,20 @@ class Optout
   # [String] The argument string
   #
   # === Errors
-  # The following +OptionError+ errors will be raised:
-  # +OptionRequired+ The option hash is missing a required value
-  # +OptionUnknown+  The option hash contains an unknown key
-  # +OptionInvalid+  The option hash contains a value the does not conform to the defined specification
+  # [OptionRequired] The option hash is missing a required value
+  # [OptionUnknown] The option hash contains an unknown key
+  # [OptionInvalid] The option hash contains a value the does not conform to the defined specification
   #
   def shell(options = {})
     create_options(options).map { |opt| opt.to_s }.join " "
   end
 
   ##
-  # Create an +argv+ array that can be to passed to an +exec()+ like function
+  # Create an +argv+ array that can be to passed to an +exec+ like function.
+  # Options containing a value will not be quoted.
   #
   # === Parameters
-  # [options (Hash)] The options hash used to construct an +argv+ array
+  # [options (Hash)] The options hash used to construct the +argv+ array
   #
   # === Returns
   # [Array] The +argv+ array, each element is a +String+
@@ -191,19 +186,25 @@ class Optout
     attr :index
 
     ##
-    # Create an option class
+    # Creates a subclass of +Option+ 
     #
     # === Parameters
-    # [key     (Symbol)] Hash key
-    # [options (Hash)]
+    # [key     (Symbol)] The hash key that will be used to lookup and create this option
+    # [switch  (String)] Optional. 
+    # [config    (Hash)] Describe how to validate and create the option
+    #
+    # === Options
+    # [:arg_separator] A +String+ used that will be used to seperate the switch from its value. Defaults to +" "+ (space).
+    # [:default]  The option's default value. This will be used if the option is +nil+ or +empty?+. 
+    # [:multiple] If +true+ multiple values will be allowed (e.g., an +Array+). Defaults to +false+. Multiple values will be joined on a comma. Set this to a +String+ to join on that string instead.
+    # [:required] If +true+ the option must contian a value i.e., it must not be +false+ or +nil+.
     #
     # === Examples
-    #
     #    MyOption = Optout::Option.create(:quality, "-q", :arg_separator => "=", :validator => Fixnum)
     #    opt = MyOption.new(75)
-    #    opt.empty?
+    #    opt.empty? # false
     #    opt.validate!
-    #    opt.to_s  # "-q='75'"
+    #    opt.to_s   # "-q='75'"
     #
 
     def self.create(key, *args)
@@ -230,11 +231,10 @@ class Optout
     end
 
     ##
-    # Turn the option into a string that can be to passed to a +system()+ like function
+    # Turn the option into a string that can be to passed to a +system+ like function.
     #
     # === Examples
-    #
-    #    MyOption = Optout::Option.create(:level, "-L", %w|fatal info warn debug|)
+    #    MyOption = Optout::Option.create(:level, "-L", %w(fatal info warn debug))
     #    MyOption.new("debug").to_s
     #    # Returns: "-L 'debug'"
     #
@@ -251,13 +251,13 @@ class Optout
     end
 
     ##
-    # Turn the option into a array that can be passed to a +exec()+ like function
+    # Turn the option into an array that can be passed to an +exec+ like function.
     #
     # === Examples
     #
-    #    MyOption = Optout::Option.create(:level, "-L", %w|fatal info warn debug|)
+    #    MyOption = Optout::Option.create(:level, "-L", %w(fatal info warn debug))
     #    MyOption.new("debug").to_a
-    #    # Returns: [ "-L, "debug" ]
+    #    # Returns: [ "-L", "debug" ]
     #
 
     def to_a
@@ -271,7 +271,7 @@ class Optout
     #
     # === Returns
     #
-    # +false+ if the option's value is +false+ or +nil+, +true+ otherwise.
+    # +false+ if the option's value is +false+, +nil+, or an empty +String+, +true+ otherwise.
 
     def empty?
       !@value || @value.to_s.empty?
@@ -299,6 +299,7 @@ class Optout
       if unix?
         sprintf "'%s'", value.gsub("'") { "'\\''" }
       else
+        # TODO: Real cmd.exe quoting
         %|"#{value}"|
       end
     end
@@ -312,7 +313,11 @@ class Optout
     end
   end
 
-  module Validator
+  ##
+  # Validators will only be applied if there's a value.
+  # If you want a value set +:required => true+
+  #
+  module Validator	# :nodoc: all
     def self.for(setting)
       if setting.respond_to?(:validate!)
         setting
@@ -335,14 +340,14 @@ class Optout
     Base = Struct.new :setting
 
     # Check for multiple values
-    class Multiple < Base  ##
+    class Multiple < Base  
       def validate!(opt)
         if !opt.empty? && opt.value.respond_to?(:join) && opt.value.size > 1 && !multiple_values_allowed?
           raise OptionInvalid.new(opt.key, "multiple values are not allowed")
         end
       end
 
-      protected
+      private
       def multiple_values_allowed?
         !!setting
       end
@@ -355,7 +360,7 @@ class Optout
         end
       end
 
-      protected
+      private
       def option_required?
         !!setting
       end
@@ -388,6 +393,7 @@ class Optout
       end
     end
 
+    # Boolean, File, and Dir don't need Base
     class Boolean < Base
       def validate!(opt)
         if !(opt.value == true || opt.value == false || opt.value.nil?)
@@ -477,7 +483,8 @@ class Optout
     end
   end
 
-  # These are shortcuts and/or marker classes use by Validator.for() to load the equivalent validation class
+  # These are shortcuts and/or marker classes used by the public interface and Validator.for()
+  # to load the equivalent validation class
   class File
     class << self
       Validator::File::RULES.each do |r|
@@ -500,6 +507,6 @@ class Optout
     end
   end
 
-  Boolean = Class.new
+  Boolean = Class.new # :nodoc: 
 end
 
