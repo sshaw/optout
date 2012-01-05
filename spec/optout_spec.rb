@@ -1,464 +1,380 @@
 require "optout"
 require "tempfile"
 require "fileutils"
+require "rbconfig"
 
-def option_class(*args)
-  options = Hash === args.last ? args.pop : {}
-  switch = args.shift
-  klass = Optout::Option.create(:x, switch, options)
-  # Need mocha to stub this?
-  klass.class_eval { def unix?; true; end }
-  klass
+def create_optout(options = {})
+  Optout.options(options) do 
+    on :x, "-x" 
+    on :y, "-y"
+  end
+end
+
+def optout_option(*options)
+  Optout.options { on :x, "-x", *options }
+end
+
+class Optout
+  class Option
+    def unix?
+      true
+    end
+  end
+end
+
+shared_examples_for "something that validates files" do
+  before(:all) { @tmpdir = Dir.mktmpdir }
+  after(:all) { FileUtils.rm_rf(@tmpdir) }
+
+  def options
+    { :x => @file }
+  end
+
+  it "should not raise an exception if a file does not exist but its directory does" do          
+    file = File.join(@tmpdir, "__bad__")
+    optout = optout_option(@validator)
+    proc { optout.argv(:x => file) }.should_not raise_exception
+  end
+
+  describe "permissions" do 
+    # Only some chmod() modes work on Win
+    if RbConfig::CONFIG["host_os"] !~ /mswin|mingw/i
+      it "should raise an exception when user permissions don't match" do 
+        FileUtils.chmod(0100, @file)    
+        optout = optout_option(@validator.permissions("r"))
+        proc { optout.argv(options) }.should raise_exception(Optout::OptionInvalid, /user permission/)
+      end
+      
+      it "should not raise an exception when user permissions match" do 
+        checker = proc do |validator| 
+          proc { optout_option(validator).argv(options) }.should_not raise_exception
+        end
+        
+        FileUtils.chmod(0100, @file)
+        checker.call(@validator.permissions("x"))
+        
+        FileUtils.chmod(0200, @file)
+        checker.call(@validator.permissions("w"))
+        
+        FileUtils.chmod(0400, @file)
+        checker.call(@validator.permissions("r"))
+        
+        FileUtils.chmod(0700, @file)
+        checker.call(@validator.permissions("rwx"))
+      end
+    end
+  end
+
+  describe "exists" do 
+    it "should raise an exception if the file does not exist" do
+      optout = optout_option(@validator.exists)
+      proc { optout.argv(:x => @file + "no_file") }.should raise_exception(Optout::OptionInvalid, /does not exist/)
+      proc { optout.argv(options) }.should_not raise_exception
+    end  
+  end
+
+  describe "under a directory" do 
+    it "should raise an exception if not under the given directory" do 
+      optout = optout_option(@validator.under(File.join("wrong", "path")))
+      proc { optout.argv(options) }.should raise_exception(Optout::OptionInvalid, /must be under/)
+      
+      optout = optout_option(@validator.under(@tmpdir))
+      proc { optout.argv(options) }.should_not raise_exception
+    end
+    
+    it "should raise an exception if the parent directory does not match the given pattern" do       
+      # We need to respect the @file's type to ensure other validation rules implicitly applied by the @validator pass.
+      # First create parent dirs to validate against
+      tmp = File.join(@tmpdir, "a1", "b1")
+      FileUtils.mkdir_p(tmp)
+
+      # Then copy the target of the validation (file or directory) under the parent dir. 
+      FileUtils.cp_r(@file, tmp)
+
+      # And create the option's value
+      tmp = File.join(tmp, File.basename(@file))
+      options = { :x => tmp }
+
+      optout = optout_option(@validator.under(/X$/))
+      proc { optout.argv(options) }.should raise_exception(Optout::OptionInvalid, /must be under/)
+
+      [ %r|(/[a-z]\d){2}|, %r|[a-z]\d$| ].each do |r|
+        optout = optout_option(@validator.under(r))
+        proc { optout.argv(options) }.should_not raise_exception      
+      end
+    end
+  end
+  
+  describe "basename" do
+    it "should raise an exception if it does not equal the given value" do 
+      optout = optout_option(@validator.named("__bad__"))
+      proc { optout.argv(options) }.should raise_exception(Optout::OptionInvalid, /name must match/)
+      
+      optout = optout_option(@validator.named(File.basename(@file)))
+      proc { optout.argv(options) }.should_not raise_exception
+    end
+    
+    it "should raise an exception if it does not match the given pattern" do    
+      optout = optout_option(@validator.named(/\A-_-_-_/))
+      proc { optout.argv(options) }.should raise_exception(Optout::OptionInvalid, /name must match/)
+
+      ends_with = File.basename(@file)[/.{2}\z/]
+      optout = optout_option(@validator.named(/#{Regexp.quote(ends_with)}\z/))
+      proc { optout.argv(options) }.should_not raise_exception    
+    end
+  end
 end
 
 describe Optout do
-  before {  @optout = Optout.new }
+  describe "defining options" do
+    before(:each) { @optout = Optout.new }
 
-  context "defining options" do
     it "should require the option's key" do
       proc { @optout.on }.should raise_exception(ArgumentError, /option key required/)
+      proc { Optout.options { on } }.should raise_exception(ArgumentError, /option key required/)
     end
-
+    
     it "should not allow an option to be defined twice" do
       @optout.on :x
       proc { @optout.on :x }.should raise_exception(ArgumentError, /already defined/)
+      proc do
+        Optout.options do
+          on :x
+          on :x
+        end
+      end.should raise_exception(ArgumentError, /already defined/)
     end
   end
 
-  context "creating options" do 
+  describe "creating options" do
+    before(:each) { @optout = create_optout }
+
+    context "as a string" do	
+      it "should only output the option's value if there's no switch" do
+        optout = Optout.options { on :x }
+        optout.shell(:x => "x").should eql("'x'")
+      end
+
+      it "should output an empty string if the option hash is empty" do
+        @optout.shell({}).should be_empty
+      end
+
+      it "should only output the option's switch if its value if true" do        
+        @optout.shell(:x => true, :y => true).should eql("-x -y")
+      end
+
+      it "should not output the option if its value is false" do        
+        @optout.shell(:x => false, :y => true).should eql("-y")
+      end
+
+      it "should only output the options that have a value" do        
+        @optout.shell(:x => "x", :y => nil).should eql("-x 'x'")
+      end
+      
+      it "should output all of the options" do        
+        @optout.shell(:x => "x", :y => "y").should eql("-x 'x' -y 'y'")
+      end
+
+      it "should escape the single quote char" do        
+        @optout.shell(:x => "' a'b'c '").should eql(%q|-x ''\'' a'\''b'\''c '\'''|)
+      end
+
+      it "should not separate switches from their value" do 
+        optout = create_optout(:arg_separator => "")
+        optout.shell(:x => "x", :y => "y").should eql("-x'x' -y'y'")
+      end
+      
+      it "should seperate all switches from their value with a '='" do
+        optout = create_optout(:arg_separator => "=")
+        optout.shell(:x => "x", :y => "y").should eql("-x='x' -y='y'")
+      end      
+
+      it "should join all options with multiple values on a delimiter" do         
+        optout = create_optout(:multiple => true)
+        optout.shell(:x => %w|a b c|, :y => "y").should eql("-x 'a,b,c' -y 'y'")
+      end
+
+      it "should join all options with multiple values on a ':'" do         
+        optout = create_optout(:multiple => ":")
+        optout.shell(:x => %w|a b c|, :y => "y").should eql("-x 'a:b:c' -y 'y'")
+      end     
+    end
+
+    context "as an array" do
+      it "should only output the option's value if there's no switch" do
+        optout = Optout.options { on :x }
+        optout.argv(:x => "x").should eql(["x"])
+      end
+
+      it "should output an empty array if the option hash is empty" do
+        @optout.argv({}).should be_empty
+      end
+
+      it "should only output the option's switch if its value if true" do
+        @optout.argv(:x => true, :y => true).should eql(["-x", "-y"])
+      end
+
+      it "should not output the option if its value is false" do
+        @optout.argv(:x => false, :y => true).should eql(["-y"])
+      end
+
+      it "should only output the options that have a value" do        
+        @optout.argv(:x => "x", :y => nil).should eql(["-x", "x"])
+      end
+
+      it "should output all of the options" do
+        @optout.argv(:x => "x", :y => "y").should eql(["-x", "x", "-y", "y"])
+      end
+
+      it "should not escape the single quote char" do        
+        @optout.argv(:x => "' a'b'c '").should eql(["-x", "' a'b'c '"])
+      end
+
+      it "should not separate switches from their value" do 
+        optout = create_optout(:arg_separator => "")
+        optout.argv(:x => "x", :y => "y").should eql(["-xx", "-yy"])
+      end
+
+      it "should seperate all of switches from their value with a '='" do
+        optout = create_optout(:arg_separator => "=") 
+        optout.argv(:x => "x", :y => "y").should eql(["-x=x", "-y=y"])
+      end
+
+      it "should join all options with multiple values on a delimiter" do         
+        optout = create_optout(:multiple => true)
+        optout.argv(:x => %w|a b c|, :y => "y").should eql(["-x", "a,b,c", "-y", "y"])
+      end
+
+      it "should join all options with multiple values on a ':'" do      
+        optout = create_optout(:multiple => ":")
+        optout.argv(:x => %w|a b c|, :y => "y").should eql(["-x", "a:b:c", "-y", "y"])
+      end     
+    end
+  end
+
+  # TODO: Check exception.key
+  describe "validation rules" do 
     it "should raise an exception if the option hash contains an unknown key" do
-      optout = Optout.new      
-      optout.on :x
-      proc { optout.argv(:bad => 123) }.should raise_exception(Optout::OptionUnknown)   
+      optout = create_optout
+      proc { optout.argv(:bad => 123) }.should raise_exception(Optout::OptionUnknown)
     end
 
     it "should not raise an exception if the option hash contains an unknown key" do
-      optout = Optout.new :assert_valid_keys => false
-      optout.on :x
+      optout = create_optout(:check_keys => false)
       proc { optout.argv(:bad => 123) }.should_not raise_exception
     end
 
-    it "should not require any options" do
-      optout = Optout.new 
-      optout.on :x
-      proc { optout.argv({}) }.should_not raise_exception
+    it "should raise an exception if an option is missing" do
+      optout = create_optout(:required => true) 
+      proc { optout.argv(:x => 123) }.should raise_exception(Optout::OptionRequired, /'y'/)
     end
 
-    it "should require all options" do
-      optout = Optout.new :required => true
-      optout.on :x
-      proc { optout.argv({}) }.should raise_exception(Optout::OptionRequired)    
-    end
-  end
-
-
-  context "as a string" do 
-    it "should match" do 
-      @optout.on :x, "-x"
-      @optout.on :y, "-y"
-      @optout.on :z, "-z"
-      options = { :x => true, :y => true, :z => true }
-      @optout.shell(options).should eql('-x -y -z')    
-    end
-
-    it "should match" do 
-      @optout.on :x, "-x"
-      @optout.on :y, "-y", :default => 2
-      @optout.on :z, "-z"
-      options = { :x => 1, :z => "a b"  }
-      @optout.shell(options).should eql(%q|-x '1' -y '2' -z 'a b'|)    
-    end
-  end
-
-  context "creating an array options" do 
-    it "should return the options as an Array of Strings" do
-      @optout.on :x, "-x"
-      argv = @optout.argv(:x => true)
-      argv.should be_an_instance_of(Array)
-      argv.should have(1).option
-      argv[0].should be_an_instance_of(String)
-    end
-
-    it "should order elements in the option Array in the order they were defined" do
-      @optout.on :x, "-x"
-      @optout.on :y, "-y"
-      @optout.on :z, "-z"
-      options = { :x => true, :y => true, :z => true }
-      argv = @optout.argv(options)
-      argv.should have(3).options
-      argv[0].should eql("-x")
-      argv[1].should eql("-y")
-      argv[2].should eql("-z")
-    end
-
-    it "should order elements in the option Array by their :index value" do
-      @optout.on :x, "-x", :index => 2
-      @optout.on :y, "-y", :index => 0
-      @optout.on :z, "-z", :index => 1
-      options = { :x => true, :y => true, :z => true }
-      argv = @optout.argv(options)
-      argv.should have(3).options
-      argv[0].should eql("-y")
-      argv[1].should eql("-z")
-      argv[2].should eql("-x")
-    end
-  end
-end
-
-describe Optout::Option do
-  before { @klass = Optout::Option.create(:x) }
-
-  context "creating a class" do
-    it "should require a key" do
-      proc { Optout::Option.create }.should raise_exception(ArgumentError)
-    end
-
-    it "should create a subclass of Optout::Option" do
-      klass = Optout::Option.create(:x)
-      klass.should be_an_instance_of(Class)
-      klass.superclass.should == Optout::Option
-    end
-  end
-
-  context "creating an option String" do
-    it "should only output the switch if the value is true" do
-      klass = Optout::Option.create(:x, "-x")
-      opt = klass.new
-      opt.to_s.should eql("")
-      opt = klass.new(false)
-      opt.to_s.should eql("")
-      #opt = @klass.new(99)
-      #opt.to_s.should == ""
-      opt = klass.new(true)
-      opt.to_s.should eql("-x")
-    end
-
-    it "should only output the switch with its argument if the value is not a boolean" do
-      klass = option_class("-x")
-      klass.new(123).to_s.should eql("-x '123'")
-    end
-
-    it "should only output the value if there's no switch" do
-      klass = option_class
-      klass.new("123").to_s.should == "'123'"
-    end
-
-    it "should use the default if no value is given" do
-      klass = option_class("-x", :default => 69)
-      klass.new.to_s.should eql("-x '69'")
-      klass.new(123).to_s.should eql("-x '123'")
-    end
-
-    it "should separate the option from its value with an alternate character" do
-      klass = option_class("-x", :arg_separator => ":")
-      klass.new(123).to_s.should eql("-x:'123'")
-    end
-
-    it "should concatenate the value if it's an array" do
-      klass = option_class("-x")
-      klass.new(%w|A B C|).to_s.should eql("-x 'A,B,C'")
-      klass = option_class("-x", :multiple => ":")
-      klass.new(%w|A B C|).to_s.should eql("-x 'A:B:C'")
-    end
-
-    context "on a machine running a Unix based OS" do
-      it "should escape single quotes in a value" do
-        klass = option_class("-x")
-        klass.new("' a'b'c '").to_s.should == %q|-x ''\'' a'\''b'\''c '\'''|
+    it "should raise an exception if a required option is missing" do
+      optout = Optout.options do
+        on :x
+        on :y, :required => true
       end
 
-      it "should always use single quotes to quote the value" do
-        klass = option_class("-x")
-        klass.new(" a ").to_s.should eql("-x 'a'")
-        klass.new("a b c").to_s.should eql("-x 'a b c'")
+      [ { :x => 123 }, { :x => 123, :y => false } ].each do |options|
+        proc { optout.argv(options) }.should raise_exception(Optout::OptionRequired, /'y'/)
       end
     end
 
-    context "on a machine running Windows" do
-      it "should always use double quotes to quote the value" do
-        klass = option_class("-x")
-        klass.class_eval {  def unix?; false; end }
-        klass.new("a b c").to_s.should eql('-x "a b c"')
+    it "should raise an exception if any option contains multiple values" do
+      optout = create_optout(:multiple => false) 
+
+      [ { :x => 123, :y => %w|a b c| },
+        { :x => 123, :y => { :a => "b", :b => "c" }} ].each do |options|
+        proc { optout.argv(options) }.should raise_exception(Optout::OptionInvalid)
+      end
+
+      # An Array with 1 value is OK
+      proc { optout.argv(:x => 123, :y => %w|a|) }.should_not raise_exception(Optout::OptionInvalid)    
+    end
+
+    it "should raise an exception if a single value option contains multiple values" do 
+      optout = Optout.options do 
+        on :x
+        on :y, :multiple => false
+      end
+
+      proc { optout.argv(:x => "x", :y => %w|a b c|) }.should raise_exception(Optout::OptionInvalid, /\by\b/)
+    end
+
+    it "should check the option's type" do
+      optout = optout_option(Float)
+      proc { optout.argv(:x => 123) }.should raise_exception(Optout::OptionInvalid, /type Float/)
+      proc { optout.argv(:x => 123.0) }.should_not raise_exception(Optout::OptionInvalid)      
+    end
+
+    it "should raise an exception if the option's value is not in the given set" do 
+      optout = optout_option(%w|sshaw skye|, :multiple => true)
+
+      [ "bob", [ "jack", "jill" ] ].each do |v|
+        proc { optout.argv(:x => v) }.should raise_exception(Optout::OptionInvalid)
+      end
+
+      [ "sshaw", [ "sshaw", "skye" ] ].each do |v|
+        proc { optout.argv(:x => v) }.should_not raise_exception
       end
     end
-  end
 
-  context "creating an option Array" do
-    it "should only output the switch with its argument if the value is not a boolean" do
-      klass = option_class("-x")
-      klass.new(123).to_a.should eql(["-x", "123"])
+    it "should raise an exception if the option's value does not match the given pattern" do 
+      optout = optout_option(/X\d{2}/)
+      proc { optout.argv(:x => "X7") }.should raise_exception(Optout::OptionInvalid, /match pattern/)
+      proc { optout.argv(:x => "X21") }.should_not raise_exception
     end
 
-    it "should only output the value if there's no switch" do
-      klass = option_class
-      klass.new("123").to_a.should eql(["123"])
+    it "should raise an exception if the option has a non-boolean value" do 
+      optout = optout_option(Optout::Boolean)
+      proc { optout.argv(:x => "x") }.should raise_exception(Optout::OptionInvalid, /does not accept/)
+      [ false, true, nil ].each do |v|
+        proc { optout.argv(:x => v) }.should_not raise_exception
+      end
     end
-
-    it "should use the default if no value is given" do
-      klass = option_class("-x", :default => 69)
-      klass.new.to_a.should eql(["-x", "69"])
-      klass.new(123).to_a.should eql(["-x", "123"])
-    end
-
-    it "should create a one element array if the arg_separator is not white space" do
-      klass = option_class("-x", :arg_separator => ":")
-      klass.new(123).to_a.should eql(["-x:123"])
-    end
-
-    it "should not quote the value" do
-      klass = option_class("-x")
-      klass.new("a b c").to_a.should eql(["-x", "a b c"])
-    end
-  end
-
-  context "validating the option" do
-    it "should raise an OptionRequired error if there's no value and one's required" do
-      klass = option_class
-      proc { klass.new.validate! }.should_not raise_exception
-      klass = option_class(:required => true)
-      proc { klass.new(123).validate! }.should_not raise_exception
-      proc { klass.new.validate! }.should raise_exception(Optout::OptionRequired)
-    end
-
-    # need to check multiple's default value
-    it "should raise an OptionInvalid error if multiple values are given when they're not allowed" do
-      klass = option_class
-      proc { klass.new.validate! }.should_not raise_exception
-      klass = option_class(:multiple => false)
-      proc { klass.new(123).validate! }.should_not raise_exception
-      proc { klass.new(%w|A B|).validate! }.should raise_exception(Optout::OptionInvalid)
-    end
-
-    it "should call custom validator" do
-      v = Class.new do
+    
+    it "should call a custom validator" do
+      klass = Class.new do
         def validate!(opt)
           raise "raise up!"
         end
       end
-      klass = option_class(:validator => v.new)
-      proc { klass.new.validate! }.should raise_exception(RuntimeError, "raise up!")
-    end
-  end
-end
 
-shared_examples_for "something that creates file validators" do
-  it "should create an instance to validate with the specified permissions" do
-    v = @validator.permissions("rw")
-    v.should be_an_instance_of(@validator.proxy_for)
-    v.instance_variable_get("@permissions").should eql("rw")
-  end
-
-  it "should create an instance to validate existence" do
-    v = @validator.exists
-    v.should be_an_instance_of(@validator.proxy_for)
-    v.instance_variable_get("@exists").should eql(true)
-    v = @validator.exists(false)
-    v.instance_variable_get("@exists").should eql(false)
-  end
-
-  it "should create an instance to validate with the specified basename" do
-    v = @validator.named(/\.log\z/)
-    v.should be_an_instance_of(@validator.proxy_for)
-    v.instance_variable_get("@named").should eql(/\.log\z/)
-  end
-
-  it "should create an instance to validate with the specified parent directory" do
-    v = @validator.under("/home/sshaw")
-    v.should be_an_instance_of(@validator.proxy_for)
-    v.instance_variable_get("@under").should eql("/home/sshaw")
-  end
-
-  it "should create an instance to validate with the all the specified rules" do
-    v = @validator.named("x").under("y").permissions("z").exists.named("a")
-    v.should be_an_instance_of(@validator.proxy_for)
-    v.instance_variable_get("@named").should eql("a")
-    v.instance_variable_get("@under").should eql("y")
-    v.instance_variable_get("@permissions").should eql("z")
-    v.instance_variable_get("@exists").should eql(true)
-  end
-end
-
-describe Optout::File do
-  it_should_behave_like "something that creates file validators"
-  before { @validator = Optout::File }
-end
-
-describe Optout::Dir do
-  it_should_behave_like "something that creates file validators"
-  before { @validator = Optout::Dir }
-end
-
-shared_examples_for "something that validates files" do
-  before do
-    @tmpdir = Dir.mktmpdir
-    @klass = option_class
-  end
-
-  after { FileUtils.rm_rf(@tmpdir) }
-
-  # Each ex needs @validator, @file and @opt
-  context "validating permissions" do
-    it "should raise an exception when they don't match the specified user permissions" do
-      path = @opt.value
-      FileUtils.chmod(0100, path)
-      @validator.permissions("r")
-      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /user permission/)
+      optout = optout_option(klass.new)
+      proc { optout.argv(:x => "x") }.should raise_exception(RuntimeError, "raise up!")
     end
 
-    it "should not raise an exception when they match the specified user permissions" do
-      path = @opt.value
-      FileUtils.chmod(0100, path)
-      @validator.permissions("x")
-      proc { @validator.validate!(@opt) }.should_not raise_exception
-
-      FileUtils.chmod(0200, path)
-      @validator.permissions("w")
-      proc { @validator.validate!(@opt) }.should_not raise_exception
-
-      FileUtils.chmod(0400, path)
-      @validator.permissions("r")
-      proc { @validator.validate!(@opt) }.should_not raise_exception
-
-      FileUtils.chmod(0700, path)
-      @validator.permissions("rwx")
-      proc { @validator.validate!(@opt) }.should_not raise_exception
-    end
-  end
-
-  context "validating existence" do
-    it "should raise an exception if it does not exist" do
-      @opt = @klass.new(@file.path + "no_file")
-      @validator.exists
-      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /does not exist/)
-
-      @validator.exists(true)
-      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /does not exist/)
+    it "should raise an exception if an unknown validation rule is used" do 
+      optout = optout_option("whaaaaa")
+      proc { optout.argv(:x => "x") }.should raise_exception(ArgumentError, /don't know how to validate/)
     end
 
-    it "should not raise an exception if it exists" do
-      @validator.exists
-      proc { @validator.validate!(@opt) }.should_not raise_exception
+    context "when validating a file" do 
+      it_should_behave_like "something that validates files"      
 
-      @validator.exists(true)
-      proc { @validator.validate!(@opt) }.should_not raise_exception
-    end
-  end
+      before(:all) do
+        @file = Tempfile.new("", @tmpdir).path
+        @validator = Optout::File
+      end
 
-  # Check regex
-  # Need to test with relative paths
-  context "validating location" do
-    it "should not raise an exception if under the specified parent directory" do
-      @validator.under(@tmpdir)
-      proc { @validator.validate!(@opt) }.should_not raise_exception
+      it "should raise an exception if it's not a file" do
+        optout = optout_option(@validator)
+        proc { optout.argv(:x => @tmpdir) }.should raise_exception(Optout::OptionInvalid, /can't create a file/)
+      end      
     end
 
-    it "should raise an exception if not under the specified parent directory" do
-      @validator.under("/wrong")
-      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /must be under/)
+    context "when validating a directory" do 
+      it_should_behave_like "something that validates files"      
+
+      before(:all) do
+        @file = Dir.mktmpdir(nil, @tmpdir)
+        @validator = Optout::Dir
+      end     
+
+      it "should raise an exception if it's not a directory" do
+        optout = optout_option(@validator)
+        proc { optout.argv(:x => Tempfile.new("", @tmpdir).path) }.should raise_exception(Optout::OptionInvalid) 
+      end
     end
-  end
-
-  context "validating basename" do
-    it "should not raise an exception if it equals the specified basename String" do
-      @validator.named(File.basename(@file.path))
-      proc { @validator.validate!(@opt) }.should_not raise_exception
-    end
-
-    it "should raise an exception if it does not equal the specified basename String" do
-      @validator.named("__bad__")
-      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /name must match/)
-    end
-
-    it "should not raise an exception if it matches the specified Regexp" do
-      ends_with = File.basename(@file.path)[/.{2}\z/]
-      @validator.named(/#{Regexp.quote(ends_with)}\z/)
-      proc { @validator.validate!(@opt) }.should_not raise_exception
-    end
-
-    it "should raise an exception if it does not match the specified Regexp" do
-      @validator.named(/\A-_-_-_/)
-      proc { @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid, /name must match/)
-    end
-end
-end
-
-describe Optout::Validator do
-  context "retrieving a validator" do
-    it "should return the Class validator for Class instance" do
-      Optout::Validator.for(Float).should be_an_instance_of(Optout::Validator::Class)
-      Optout::Validator.for(Fixnum).should be_an_instance_of(Optout::Validator::Class)
-    end
-
-    it "should return the Regex validator for a Rexep instance" do
-      Optout::Validator.for(//).should be_an_instance_of(Optout::Validator::Regexp)
-    end
-
-    it "should return the Array validator for an Array instance" do
-      Optout::Validator.for([]).should be_an_instance_of(Optout::Validator::Array)
-    end
-
-    it "should return the File validator for Optout::File class" do
-      Optout::Validator.for(Optout::File).should be_an_instance_of(Optout::Validator::File)
-    end
-
-    it "should return the Dir validator for Optout::Dir class" do
-      Optout::Validator.for(Optout::Dir).should be_an_instance_of(Optout::Validator::Dir)
-    end
-
-    it "should return the Boolean validator for Optout::Boolean class" do
-      Optout::Validator.for(Optout::Boolean).should be_an_instance_of(Optout::Validator::Boolean)
-    end
-
-    it "should return the argument if it responds to validate!" do
-      v = Class.new {  def validate!; end }.new
-      Optout::Validator.for(v).should eql(v)
-    end
-  end
-end
-
-describe Optout::Validator::Class do
-  it "should raise an exception if the value is not of the specified Class" do
-    opt = option_class.new("x")
-    v = Optout::Validator::Class.new(Float)
-    proc { v.validate!(opt) }.should raise_exception(Optout::OptionInvalid)
-    opt = option_class.new(1.12)
-    proc { v.validate!(opt) }.should_not raise_exception
-  end
-end
-
-describe Optout::Validator::Boolean do
-  it "should raise an exception if the value is not boolean or nil" do
-    opt = option_class.new("x")
-    v = Optout::Validator::Boolean.new
-    proc { v.validate!(opt) }.should raise_exception(Optout::OptionInvalid)
-    opt = option_class.new(nil)
-    proc { v.validate!(opt) }.should_not raise_exception
-    opt = option_class.new(true)
-    proc { v.validate!(opt) }.should_not raise_exception
-    opt = option_class.new(false)
-  end
-end
-
-describe Optout::Validator::File do
-  it_should_behave_like "something that validates files"
-
-  before do
-    @file = Tempfile.new(nil, @tmpdir)
-    @opt = @klass.new(@file.path)
-    @validator = Optout::Validator::File.new
-  end
-
-#   it "should raise an exception if the file is a directory" do
-#     proc {  @validator.validate!(@opt) }.should raise_exception(Optout::OptionInvalid)
-#   end
-end
-
-describe Optout::Validator::Dir do
-  it_should_behave_like "something that validates files"
-
-  before do
-    @file = File.new(Dir.mktmpdir(nil, @tmpdir))
-    @opt = @klass.new(@file.path)
-    @validator = Optout::Validator::Dir.new
   end
 end
