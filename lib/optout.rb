@@ -332,7 +332,7 @@ class Optout
     end
   end
 
-  module Validator	# :nodoc: all
+  module Validator	#:nodoc: all
     def self.for(setting)
       if setting.respond_to?(:validate!)
         setting
@@ -499,13 +499,13 @@ class Optout
     end
   end
 
-  #--
+  
+  #
   # These are shortcuts and/or marker classes used by the public interface so Validator.for()
   # can load the equivalent validation class
-  #++
-  #  
-  # == Overview
   #
+
+  ##
   # <code>Optout::File</code> is a validaton rule that can be used to check that an option's value is a path to a file.
   # By default <code>Optout::File</code> *does* *not* *check* that the file exists. Instead, it checks that the file's parent directory 
   # exists. This is done so that you can validate a path that _will_ be created by the program the options are for. 
@@ -568,14 +568,13 @@ class Optout
         proxy_for.new.exists(wanted)
       end
 
-      def proxy_for # :nodoc:
+      def proxy_for #:nodoc:
         Validator::File
       end
     end
   end
 
-  # == Overview
-  #
+  ##
   # <code>Optout::Dir</code> is a validaton rule that can be used to check that an option's value is a path to a directory.
   # Validation rules can be combined:
   #
@@ -586,12 +585,12 @@ class Optout
   # See Optout::File for a list of methods.
   #
   class Dir < File
-    def self.proxy_for # :nodoc:
+    def self.proxy_for #:nodoc:
       Validator::Dir
     end
   end
 
-  class Boolean  # :nodoc:
+  class Boolean  #:nodoc:
   end
 end
 

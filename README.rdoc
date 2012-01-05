@@ -1,33 +1,33 @@
 = Optout
 
 Optout helps you write code that will call +exec+ and +system+ like functions. It allows you to map hash keys to command line 
-arguments and define validation rules for your options.
+arguments and define validation rules that must be met before they're created.
 
 == Overview
 
-    require "optout"
+ require "optout"
 
-    # Create options for `gem`
-    optout = Optout.options do
-      on :gem, "install", :required => true
-      on :os, "--platform", %w(mswin cygwin mingw)
-      on :version, "-v", /\A\d+(\.\d+)*\z/
-      on :user, "--user-install"
-      on :location, "-i", Optout::Dir.exists.under(ENV["HOME"])
-    end
+ # Create options for `gem`
+ optout = Optout.options do
+   on :gem, "install", :required => true
+   on :os, "--platform", %w(mswin cygwin mingw)
+   on :version, "-v", /\A\d+(\.\d+)*\z/
+   on :user, "--user-install"
+   on :location, "-i", Optout::Dir.exists.under(ENV["HOME"])
+ end
 
-    options = {
-      :gem => "rake",
-      :os => "mswin",
-      :version => "0.9.2",
-      :user => true
-    }
+ options = {
+   :gem => "rake",
+   :os => "mswin",
+   :version => "0.9.2",
+   :user => true
+ }
 
-    exec "gem", *optout.argv(options)
-    # Returns: ["install", "rake", "--platform", "mswin", "-v", "0.9.2", "--user-install"]
+ exec "gem", *optout.argv(options)
+ # Returns: ["install", "rake", "--platform", "mswin", "-v", "0.9.2", "--user-install"]
 
-    `gem #{optout.shell(options)}`
-    # Returns: "'install' 'rake' --platform 'mswin' -v '0.9.2' --user-install"
+ `gem #{optout.shell(options)}`
+ # Returns: "'install' 'rake' --platform 'mswin' -v '0.9.2' --user-install"
 
 == Install
 
@@ -35,73 +35,72 @@ arguments and define validation rules for your options.
 
 == Defining Options
 
-Inorder to turn the incoming option hash into something useful you must tell +Optout+ a bit about your options. This is done by calling Optout#on and passing it the name of a key in the option hash. The simplest case is an option with no switch:
+Inorder to turn the incoming option hash into something useful you must tell +Optout+ a bit about your options. This is done by calling <code>Optout#on</code> and passing it the name of a key in the option hash. The simplest case is an option with no switch:
 
-     optout = Optout.options do 
-       on :path
-     end
+  optout = Optout.options do 
+    on :path
+  end
 
-     optout.shell(:path => "/home/sshaw")
-     # Returns: '/home/sshaw'
+  optout.shell(:path => "/home/sshaw")
+  # Returns: '/home/sshaw'
 
 Key names can be a +Symbol+ or a +String+, +Optout+ will check for both in the option hash. 
 
 If the option has a switch it can be given after the option's key:
 
-     optout = Optout.options do 
-       on :path, "-p"
-     end
+  optout = Optout.options do 
+    on :path, "-p"
+  end
 
-     optout.shell(:path => "/home/sshaw")
-     # Returns: -p '/home/sshaw'
+  optout.shell(:path => "/home/sshaw")
+  # Returns: -p '/home/sshaw'
 
-Some programs can be finicky about the space between the switch and the value or require options 
+Some programs can be finicky about the space between the switch and the value, or require options 
 in a different format. +Optout+ accepts various configuration options that can remdy this:
 
-     optout = Optout.options do 
-       on :path, "-p", :arg_separator => ""
-     end
+  optout = Optout.options do 
+    on :path, "-p", :arg_separator => ""
+  end
 
-     optout.shell(:path => "/home/sshaw")
-     # Returns: -p'/home/sshaw'
+  optout.shell(:path => "/home/sshaw")
+  # Returns: -p'/home/sshaw'
 
-     optout = Optout.options do 
-       on :path, "--path", :arg_separator => "=", :required => true
-     end
+  optout = Optout.options do 
+    on :path, "--path", :arg_separator => "=", :required => true
+  end
 
-     optout.shell(:path => "/home/sshaw")
-     # Returns: --path='/home/sshaw'
+  optout.shell(:path => "/home/sshaw")
+  # Returns: --path='/home/sshaw'
 
-     optout.shell({})
-     # Raises: Optout::OptionRequired
-
+  optout.shell({})
+  # Raises: Optout::OptionRequired
 
 == Validating Options
 
 +Optout+ can validate your options too. Just specify the validation rule after the option's key or switch:
 
-     optout = Optout.options do 
-       # Must match [a-z]
-       on :path, "-p", /[a-z]/
-     end
+  optout = Optout.options do 
+    # Must match [a-z]
+    on :path, "-p", /[a-z]/
+  end
 
-     optout = Optout.options do 
-       # Must be true, false, or nil
-       on :path, "-p", Optout::Boolean
-     end
+  optout = Optout.options do 
+    # Must be true, false, or nil
+    on :path, "-p", Optout::Boolean
+  end
 
-     optout = Optout.options do 
-       # Must be in the given set
-       on :path, %w(/home/sshaw /Users/gatinha /Users/fofinha)
-     end
+  optout = Optout.options do 
+    # Must be in the given set
+    on :path, %w(/home/sshaw /Users/gatinha /Users/fofinha)
+  end
 
-     optout = Optout.options do 
-       # Must be a diretory under "/sshaw" and have user write permission
-       on :path, Optout::Dir.under("/home").permissions("w")
-     end
+  optout = Optout.options do 
+    # Must be a diretory under "/sshaw" and have user write permission
+    on :path, Optout::Dir.under("/home").permissions("w")
+  end
 
-     optout.shell({})
-     # Raises: Optout::OptionInvalid
+  optout.shell(:path => "/root")
+  # Raises: Optout::OptionInvalid
 
 There are plenty of other features, see {the RDoc}[http://rubydoc.info/github/sshaw/optout/frames].
 
