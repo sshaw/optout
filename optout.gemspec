@@ -7,7 +7,7 @@ Gem::Specification.new do |s|
   s.summary     = "The opposite of getopt(): validate an option hash and turn it into something appropriate for exec() and system() like functions"
   s.description =<<-DESC
     Optout helps you write code that will call exec() and system() like functions. It allows you to map hash keys to command line 
-    arguments and define validation rules that must be me before they're created. 
+    arguments and define validation rules that must be me before the command line options are created. 
   DESC
   s.authors     = ["Skye Shaw"]
   s.email       = "sshaw@lucas.cis.temple.edu"

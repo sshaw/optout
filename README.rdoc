@@ -1,7 +1,7 @@
 = Optout
 
 Optout helps you write code that will call +exec+ and +system+ like functions. It allows you to map hash keys to command line 
-arguments and define validation rules that must be met before they're created.
+arguments and define validation rules that must be met before the command line arguments are created.
 
 == Overview
 
