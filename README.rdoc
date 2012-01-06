@@ -95,8 +95,8 @@ in a different format. +Optout+ accepts various configuration options that can r
   end
 
   optout = Optout.options do 
-    # Must be a diretory under "/sshaw" and have user write permission
-    on :path, Optout::Dir.under("/home").permissions("w")
+    # Must be a diretory under "/home" and have user read and write permissions
+    on :path, Optout::Dir.under("/home").permissions("rw")
   end
 
   optout.shell(:path => "/root")

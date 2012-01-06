@@ -180,7 +180,9 @@ class Optout
   end
 
   private
-  def create_options(options = {})
+  def create_options(options = {})    
+    raise ArgumentError "options must be a Hash" unless Hash === options
+
     argv = []
     options = options.dup
 
@@ -384,6 +386,8 @@ class Optout
 
     class Array < Base
       def validate!(opt)
+        return if opt.empty?
+
         values = [opt.value].flatten
         values.each do |e|
           if !setting.include?(e)

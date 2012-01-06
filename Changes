@@ -1,0 +1,5 @@
+-------------------------
+2012-01-05	v0.0.2	
+-------------------------
+* Bug Fix: Validating that an option's value is in a set does not raise an exception when the value is empty?
+* Optout#argv and Optout#shell raise an ArgumentError if they're not passed a Hash

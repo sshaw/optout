@@ -314,7 +314,7 @@ describe Optout do
         proc { optout.argv(:x => v) }.should raise_exception(Optout::OptionInvalid)
       end
 
-      [ "sshaw", [ "sshaw", "skye" ] ].each do |v|
+      [ nil, "sshaw", [ "sshaw", "skye" ] ].each do |v|
         proc { optout.argv(:x => v) }.should_not raise_exception
       end
     end
