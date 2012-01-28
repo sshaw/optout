@@ -68,13 +68,29 @@ in a different format. +Optout+ accepts various configuration options that can r
   optout = Optout.options do 
     on :path, "--path", :arg_separator => "=", :required => true
   end
-
+ 
   optout.shell(:path => "/home/sshaw")
   # Returns: --path='/home/sshaw'
 
   optout.shell({})
   # Raises: Optout::OptionRequired
 
+Options can be grouped into required and optional:
+
+  Optout.options :arg_separator => "=" do 
+    required do 
+      on :in, "if"
+      on :out, "of"
+    end
+
+    optional do 
+      on :size, "size"
+      on :count, "count"
+    end
+  end
+
+  optout.shell(:in => "/dev/zero", :out => "/var/log/secure")
+   
 == Validating Options
 
 +Optout+ can validate your options too. Just specify the validation rule after the option's key or switch:
@@ -85,7 +101,7 @@ in a different format. +Optout+ accepts various configuration options that can r
   end
 
   optout = Optout.options do 
-    # Must be true, false, or nil
+    # Must be true, false, or nil (add :required => true to allow only true or false)
     on :path, "-p", Optout::Boolean
   end
 

@@ -159,6 +159,10 @@ describe Optout do
         @optout.shell({}).should be_empty
       end
 
+      it "should raise an ArgumentError if the options are not a Hash" do 
+        proc { @optout.shell("optionz") }.should raise_exception(ArgumentError)
+      end
+
       it "should only output the option's switch if its value if true" do        
         @optout.shell(:x => true, :y => true).should eql("-x -y")
       end
@@ -204,6 +208,10 @@ describe Optout do
       it "should only output the option's value if there's no switch" do
         optout = Optout.options { on :x }
         optout.argv(:x => "x").should eql(["x"])
+      end
+
+      it "should raise an ArgumentError if the options are not a Hash" do 
+        proc { @optout.argv("optionz") }.should raise_exception(ArgumentError)
       end
 
       it "should output an empty array if the option hash is empty" do
@@ -253,7 +261,7 @@ describe Optout do
   end
 
   # TODO: Check exception.key
-  describe "validation rules" do 
+  describe "validation rules" do         
     it "should raise an exception if the option hash contains an unknown key" do
       optout = create_optout
       proc { optout.argv(:bad => 123) }.should raise_exception(Optout::OptionUnknown)
@@ -263,7 +271,7 @@ describe Optout do
       optout = create_optout(:check_keys => false)
       proc { optout.argv(:bad => 123) }.should_not raise_exception
     end
-
+   
     it "should raise an exception if an option is missing" do
       optout = create_optout(:required => true) 
       proc { optout.argv(:x => 123) }.should raise_exception(Optout::OptionRequired, /'y'/)
@@ -375,6 +383,38 @@ describe Optout do
         optout = optout_option(@validator)
         proc { optout.argv(:x => Tempfile.new("", @tmpdir).path) }.should raise_exception(Optout::OptionInvalid) 
       end
+    end
+  end
+
+  describe "#required" do 
+    before :all do 
+      @optout = Optout.options do 
+        required do 
+          on :x, "-x"
+          on :y, "-y"
+        end
+      end
+    end
+
+    it "should require all options" do 
+      lambda { @optout.argv }.should raise_exception(Optout::OptionRequired, /x/)
+      lambda { @optout.argv :x => "x" }.should raise_exception(Optout::OptionRequired, /y/)
+      lambda { @optout.argv :x => "x", :y => "y" }.should_not raise_exception
+    end
+  end
+
+  describe "#optional" do 
+    before :all do 
+      @optout = Optout.options do 
+        optional do 
+          on :x, "-x"
+          on :y, "-y"
+        end
+      end
+    end
+
+    it "should not require any options" do 
+      lambda { @optout.argv }.should_not raise_exception(Optout::OptionRequired)
     end
   end
 end

@@ -2,7 +2,7 @@ require "rbconfig"
 require "pathname"
 
 class Optout
-  VERSION = "0.0.1"
+  VERSION = "0.0.2"
 
   class OptionError < StandardError
     attr :key
@@ -85,7 +85,8 @@ class Optout
   def initialize(args = {})
     @options = {}
     @check_keys = args.include?(:check_keys) ? args[:check_keys] : true
-    #@opt_seperator = args[:opt_seperator]
+    @required_context = option_context(:required => true)
+    @optional_context = option_context(:required => false)  
     @default_opt_options = {
       :required => args[:required],
       :multiple => args[:multiple],
@@ -107,7 +108,6 @@ class Optout
   #
   # [:arg_separator] The +String+ used to separate the option's switch from its value. Defaults to <code>" "</code> (space).
   # [:default]  The option's default value. This will be used if the option is +nil+ or +empty?+. 
-  # [:index]    The index of the option in the resulting +String+ or +Array+.
   # [:multiple] If +true+ the option will accept multiple values. If +false+ an <code>Optout::OptionInvalid</code> error will be raised if the option 
   # 		contains multiple values. If +true+ multiple values are joined on a comma, you can set this to a +String+ 
   #		to join on that string instead. Defaults to +false+.
@@ -131,6 +131,14 @@ class Optout
   #
   # [ArgumentError] An +ArgumentError+ is raised if +key+ is +nil+ or +key+ has already been defined
 
+  def optional(&block)
+    @optional_context.instance_eval(&block)
+  end
+
+  def required(&block)
+    @required_context.instance_eval(&block)
+  end
+
   def on(*args)
     key = args.shift
 
@@ -150,9 +158,11 @@ class Optout
   # Create an argument string that can be to passed to a +system+ like function.
   #
   # === Parameters
+  #
   # [options (Hash)] The option hash used to construct the argument string.
   #
   # === Returns
+  #
   # [String] The argument string.
   #
   # === Errors
@@ -165,12 +175,16 @@ class Optout
   # Create an +argv+ array that can be to passed to an +exec+ like function.
   #
   # === Parameters
+  #
   # [options (Hash)] The options hash used to construct the +argv+ array. 
   #
   # === Returns
+  #
   # [Array] The +argv+ array, each element is a +String+
   #
   # === Errors
+  #
+  # [ArgumentError] If options are not a +Hash+
   # [Optout::OptionRequired] The option hash is missing a required value.
   # [Optout::OptionUnknown] The option hash contains an unknown key.
   # [Optout::OptionInvalid] The option hash contains a value the does not conform to the defined specification.
@@ -181,7 +195,7 @@ class Optout
 
   private
   def create_options(options = {})    
-    raise ArgumentError "options must be a Hash" unless Hash === options
+    raise ArgumentError, "options must be a Hash" unless Hash === options
 
     argv = []
     options = options.dup
@@ -201,6 +215,17 @@ class Optout
          sort_by { |opt| opt.index }
   end
 
+  def option_context(forced_options)
+    klass = self
+    Class.new do
+      define_method(:on) do |*args|
+        options = Hash === args.last ? args.pop : {}        
+        options.merge!(forced_options)
+        klass.on *args, options
+      end
+    end.new
+  end
+  
   class Option
     attr :key
     attr :value

@@ -1,4 +1,4 @@
-require "lib/optout"
+require File.expand_path("../lib/optout", __FILE__)
 
 Gem::Specification.new do |s|
   s.name        = "optout"
@@ -11,8 +11,9 @@ Gem::Specification.new do |s|
   DESC
   s.authors     = ["Skye Shaw"]
   s.email       = "sshaw@lucas.cis.temple.edu"
-  s.files       = ["lib/optout.rb", "spec/optout_spec.rb", "README.rdoc"]
+  s.files       = ["lib/optout.rb", "spec/optout_spec.rb", "README.rdoc", "Rakefile", "Changes"]
   s.test_files  = ["spec/optout_spec.rb"]
+  s.extra_rdoc_files = ["README.rdoc"]
   s.homepage    = "http://github.com/sshaw/optout"
   s.license     = "MIT"
   s.add_development_dependency "rake", "~> 0.9.0"
