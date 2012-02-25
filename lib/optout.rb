@@ -131,20 +131,14 @@ class Optout
   #
   # [ArgumentError] An +ArgumentError+ is raised if +key+ is +nil+ or +key+ has already been defined
 
-  def optional(&block)
-    @optional_context.instance_eval(&block)
-  end
-
-  def required(&block)
-    @required_context.instance_eval(&block)
-  end
-
   def on(*args)
     key = args.shift
 
     # switch is optional, this could be a validation rule
     switch = args.shift if String === args[0]
     raise ArgumentError, "option key required" if key.nil?
+
+    key = key.to_sym
     raise ArgumentError, "option already defined: '#{key}'" if @options[key]
 
     opt_options = Hash === args.last ? @default_opt_options.merge(args.pop) : @default_opt_options.dup
@@ -152,6 +146,16 @@ class Optout
     opt_options[:validator] = args.shift
 
     @options[key] = Option.create(key, switch, opt_options)
+  end
+
+  # Create a set of options that are optional
+  def optional(&block)
+    @optional_context.instance_eval(&block)
+  end
+
+  # Create a set of options that are required
+  def required(&block)
+    @required_context.instance_eval(&block)
   end
 
   ##
@@ -219,9 +223,10 @@ class Optout
     klass = self
     Class.new do
       define_method(:on) do |*args|
-        options = Hash === args.last ? args.pop : {}        
+        options = Hash === args.last ? args.pop.dup : {}        
         options.merge!(forced_options)
-        klass.on *args, options
+        args << options
+        klass.on *args
       end
     end.new
   end
@@ -353,26 +358,27 @@ class Optout
     def unix?
       RbConfig::CONFIG["host_os"] !~ /mswin|mingw/i
     end
-
+    
     def normalize(value)
       value.respond_to?(:entries) ? value.entries.join(@joinon) : value.to_s.strip
     end
   end
-
+  
   module Validator	#:nodoc: all
     def self.for(setting)
       if setting.respond_to?(:validate!)
         setting
       else
         # Load validator based on the setting's name or the name of its class
-        validator = setting.class.name
+        # Note that on 1.9 calling class.name on anonymous classes (i.e., Class.new.new) returns nil
+        validator = setting.class.name.to_s  
         if validator == "Class"
-          name = setting.name.split("::", 2)
+          name = setting.name.to_s.split("::", 2)
           validator = name[1] if name[1] && name[0] == "Optout"
         end
 
-        # Support 1.8 and 1.9, avoid String/Symbol and const_defined? differences 
-        if !constants.include?(validator) && !constants.include?(validator.to_sym)
+        # Support 1.8 and 1.9, avoid String/Symbol and const_defined? differences
+        if validator.empty? || !constants.include?(validator) && !constants.include?(validator.to_sym)
           raise ArgumentError, "don't know how to validate with #{setting}"
         end
 
@@ -432,7 +438,7 @@ class Optout
 
     class Class < Base
       def validate!(opt)
-        if !(setting === opt.value)
+        if !opt.empty? && !(setting === opt.value)
           raise OptionInvalid.new(opt.key, "value '#{opt.value}' must be type #{setting}")
         end
       end
@@ -441,6 +447,7 @@ class Optout
     class Boolean < Base
       def validate!(opt)
         if !(opt.value == true || opt.value == false || opt.value.nil?)
+          # TODO: Better message
           raise OptionInvalid.new(opt.key, "does not accept an argument")
         end
       end

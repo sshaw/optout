@@ -11,12 +11,11 @@ Gem::Specification.new do |s|
   DESC
   s.authors     = ["Skye Shaw"]
   s.email       = "sshaw@lucas.cis.temple.edu"
-  s.files       = ["lib/optout.rb", "spec/optout_spec.rb", "README.rdoc", "Rakefile", "Changes"]
+  s.files       = ["lib/optout.rb", "spec/optout_spec.rb", "README.rdoc"]
   s.test_files  = ["spec/optout_spec.rb"]
   s.extra_rdoc_files = ["README.rdoc"]
   s.homepage    = "http://github.com/sshaw/optout"
   s.license     = "MIT"
   s.add_development_dependency "rake", "~> 0.9.0"
-  s.add_development_dependency "rspec", "~> 1.3.0"
-  s.extra_rdoc_files = ["README.rdoc"]
+  s.add_development_dependency "rspec", "~> 2.8.0"
 end
