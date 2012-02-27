@@ -13,7 +13,7 @@ shared_examples_for "something that validates files" do
     it "should not raise an exception" do 
       no_file = File.join(File.dirname(file), "does_not_exist")
       optout = optout_option(described_class)
-      proc { optout.argv(:x => no_file) }.should_not raise_exception
+      lambda { optout.argv(:x => no_file) }.should_not raise_exception
     end
   end
 
@@ -97,8 +97,8 @@ shared_examples_for "something that validates files" do
 
     context "when the parent directory matches the given regex" do
       it "should not raise an exception" do
-        regex = /#{File.dirname(file)[-1,1]}$/
-        optout = optout_option(described_class.under(regex))
+        ends_with = File.dirname(file)[-1,1]
+        optout = optout_option(described_class.under(/#{Regexp.quote(ends_with)}$/))
         lambda { optout.argv(options) }.should_not raise_exception
       end
     end
@@ -107,8 +107,8 @@ shared_examples_for "something that validates files" do
   describe "#named" do
     context "when the basename matches the regex" do
       it "should not raise an exception" do 
-        ends_with = File.basename(subject)[/.{2}\z/]
-        optout = optout_option(described_class.named(/#{Regexp.quote(ends_with)}\z/))
+        ends_with = File.basename(subject)[-1,1]
+        optout = optout_option(described_class.named(/#{Regexp.quote(ends_with)}$/))
         lambda { optout.argv(options) }.should_not raise_exception
       end
     end
@@ -180,37 +180,37 @@ describe Optout do
       end
       
       context "when false" do
-        before(:each) { @optout = optout_option(:multiple => false) }
+        subject { optout_option(:multiple => false) }
         
         it "should raise an OptionInvalid exception if an option contains multiple values" do
           collection.each do |options|
-            lambda { @optout.argv(options) }.should raise_exception(Optout::OptionInvalid)
+            lambda { subject.argv(options) }.should raise_exception(Optout::OptionInvalid, /multiple values/)
           end
         end
         
         it "should not raise an exception if an option contains a collection with only 1 element" do
           [ :x => %w|a|,
             :x => { :a => "a" } ].each do |options|
-            lambda { @optout.argv(options) }.should_not raise_exception(Optout::OptionInvalid)
+            lambda { subject.argv(options) }.should_not raise_exception
           end
         end
         
         it "should not raise an exception if an option contains a single value" do
-          lambda { @optout.argv(:x => "x") }.should_not raise_exception(Optout::OptionInvalid)
+          lambda { subject.argv(:x => "x") }.should_not raise_exception
         end
       end
       
       context "when true" do
-        before(:each) { @optout = optout_option(:multiple => true) }
+        subject { optout_option(:multiple => true) }
         
         it "should not raise an OptionInvalid exception if an option contains multiple values" do
           collection.each do |options|
-            lambda { @optout.argv(options) }.should_not raise_exception(Optout::OptionInvalid)
+            lambda { subject.argv(options) }.should_not raise_exception
           end
         end
         
         it "should not raise an OptionInvalid exception if an option contains a single value" do
-          lambda { @optout.argv(:x => "x") }.should_not raise_exception(Optout::OptionInvalid)
+          lambda { subject.argv(:x => "x") }.should_not raise_exception
         end
       end
     end
@@ -272,6 +272,10 @@ describe Optout do
         optout = create_optout(:multiple => ":")
         optout.shell(:x => %w|a b c|, :y => "y").should eql("-x 'a:b:c' -y 'y'")
       end
+
+      it "should not differentiate between a String key and a Symbol key" do 
+        @optout.shell("x" => "x").should eql(@optout.shell(:x => "x"))
+      end
     end
 
     context "as an array" do
@@ -327,17 +331,20 @@ describe Optout do
         optout = create_optout(:multiple => ":")
         optout.argv(:x => %w|a b c|, :y => "y").should eql(["-x", "a:b:c", "-y", "y"])
       end
+
+      it "should not differentiate between a String key and a Symbol key" do 
+        @optout.argv("x" => "x").should eql(@optout.argv(:x => "x"))
+      end
     end
   end
 
   # TODO: Check exception.key
   describe "validation rules" do
-    # Global
     describe "the :check_keys option" do
       context "when true" do
         it "raises an exception if the option hash contains an unknown key" do
           optout = create_optout
-          lambda { optout.argv(:bad => 123) }.should raise_exception(Optout::OptionUnknown)
+          lambda { optout.argv(:bad => 123) }.should raise_exception(Optout::OptionUnknown, /bad/)
         end
       end
 
@@ -349,7 +356,6 @@ describe Optout do
       end
     end
 
-    # These should be for #on and then tested globally
     describe "type checking" do
       it_should_behave_like "a validator"
       subject { optout_option(Float) }
@@ -501,8 +507,6 @@ describe Optout::File do
   let(:file) { @file.path }  
   let(:options) { { :x => file } }
 
-  #Tempfile.new("", tmpdir).path }
-  
   context "when the option is not a file" do
     it "raises an OptionInvalid exception" do
       optout = optout_option(described_class)
