@@ -90,7 +90,8 @@ Options can be grouped into required and optional:
   end
 
   optout.shell(:in => "/dev/zero", :out => "/var/log/secure")
-   
+  # Returns: in="/dev/zero" out="/var/log/secure"  
+ 
 == Validating Options
 
 +Optout+ can validate your options too. Just specify the validation rule after the option's key or switch:
