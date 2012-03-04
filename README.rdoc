@@ -20,7 +20,7 @@ arguments and define validation rules that must be met before the command line a
    :gem => "rake",
    :os => "mswin",
    :version => "0.9.2",
-   :user => true
+   :user => truep	
  }
 
  exec "gem", *optout.argv(options)
@@ -90,7 +90,7 @@ Options can be grouped into required and optional:
   end
 
   optout.shell(:in => "/dev/zero", :out => "/var/log/secure")
-  # Returns: in="/dev/zero" out="/var/log/secure"  
+  # Returns: in='/dev/zero' out='/var/log/secure'
  
 == Validating Options
 
@@ -119,13 +119,17 @@ Options can be grouped into required and optional:
   optout.shell(:path => "/root")
   # Raises: Optout::OptionInvalid
 
-There are plenty of other features, see {the RDoc}[http://rubydoc.info/github/sshaw/optout/frames].
+== TODOs
+
+* Proper <code>cmd.exe</code> quoting 
+* Mutually exclusive options
+* Split options i.e., <code>:jvm => %w[A B C]</code> would be created as <code>-XA -XB -XC</code>
 
 == More Info
 
 === RDoc
 
-http://rubydoc.info/github/sshaw/optout/frames
+http://rubydoc.info/github/sshaw/optout/frames (with RDoc -> YARD incompatibilities :)
 
 === Bugs
 
@@ -136,5 +140,7 @@ https://github.com/sshaw/optout/issues
 Skye Shaw [sshaw AT lucas.cis.temple.edu]
 
 == License
+
+Copyright (c) 2011-2012 Skye Shaw
 
 Released under the MIT License: http://www.opensource.org/licenses/MIT

@@ -1,7 +1,9 @@
--------------------------
-2012-01-05  v0.0.2	
--------------------------
+= Optout Changelog
+
+== v0.0.2 (2012-01-05)
+
 * Bug Fix: Validating that an option's value is in a set or is an instance of a class should not raise 
-  an Optout::OptionRequired exception when the value is #empty?
+  an Optout::OptionRequired exception when the value is empty?
 * Optout#argv and Optout#shell raise an ArgumentError if they're not passed a Hash
 * Added required and optional methods
+
