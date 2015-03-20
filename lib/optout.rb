@@ -32,13 +32,13 @@ class Optout
 
   class << self
     ##
-    # Define a set of options. 
+    # Define a set of options.
     # After the options are defined call Optout#argv or Optout#shell to create them.
-    # 
-    #  optz = Optout.options config do 
+    #
+    #  optz = Optout.options config do
     #    on :key, "-switch", ValidationRule, :multiple => false, :required => true
     #    # ...
-    #  end        
+    #  end
     #
     # === Parameters
     #
@@ -72,13 +72,13 @@ class Optout
     #
     #  # Same as above
     #  optz = Optout.options :check_keys => false do
-    #    required do 
+    #    required do
     #      on :lib
     #      on :prefix, "--prefix" , %w{/sshaw/lib /sshaw/usr/lib}, :arg_separator => "="
     #    end
     #  end
     #
-    
+
     def options(config = {}, &block)
       optout = new(config)
       optout.instance_eval(&block) if block_given?
@@ -92,7 +92,7 @@ class Optout
     @options = {}
     @check_keys = args.include?(:check_keys) ? args[:check_keys] : true
     @required_context = option_context(:required => true)
-    @optional_context = option_context(:required => false)  
+    @optional_context = option_context(:required => false)
     @default_opt_options = {
       :required => args[:required],
       :multiple => args[:multiple],
@@ -101,21 +101,21 @@ class Optout
   end
 
   ##
-  # Define an option. 
+  # Define an option.
   #
   # === Parameters
   #
-  # [key     (Symbol)] The key of the option in the option hash passed to +shell+ or +argv+. 
+  # [key     (Symbol)] The key of the option in the option hash passed to +shell+ or +argv+.
   # [switch  (String)] Optional. The option's command line switch. If no switch is given only the option's value is output.
   # [rule    (Object)] Optional. Validation rule, see Optout#on@Validating.
-  # [options   (Hash)] Additional option configuration, see Optout#on@Options. 
+  # [options   (Hash)] Additional option configuration, see Optout#on@Options.
   #
   # === Options
   #
-  # [:arg_separator] The +String+ used to separate the option's switch from its value. Defaults to <code>" "</code> (space). This can be set globally via Optout::options. 
-  # [:default]  The option's default value. This will be used if the option is +nil+ or +empty?+. 
-  # [:multiple] If +true+ the option will accept multiple values. If +false+ an <code>Optout::OptionInvalid</code> error will be raised if the option contains multiple values. By default multiple values are joined on a comma, you can set this to a +String+ to join on that string instead. Defaults to +false+. This can be set globally via Optout::options. 
-  # [:required] If +true+ the option must contian a value i.e., it must not be +false+ or +nil+ otherwise an <code>Optout::OptionRequired</code> exception will be raised. 
+  # [:arg_separator] The +String+ used to separate the option's switch from its value. Defaults to <code>" "</code> (space). This can be set globally via Optout::options.
+  # [:default]  The option's default value. This will be used if the option is +nil+ or +empty?+.
+  # [:multiple] If +true+ the option will accept multiple values. If +false+ an <code>Optout::OptionInvalid</code> error will be raised if the option contains multiple values. By default multiple values are joined on a comma, you can set this to a +String+ to join on that string instead. Defaults to +false+. This can be set globally via Optout::options.
+  # [:required] If +true+ the option must contian a value i.e., it must not be +false+ or +nil+ otherwise an <code>Optout::OptionRequired</code> exception will be raised.
   #		Defaults to +false+. This can be set globally via Optout::options or for a set of options via Optout#required or Optout#optional.
   #
   # === Errors
@@ -124,9 +124,9 @@ class Optout
   #
   # === Validating
   #
-  # An option's value can be restricted by a validation rule. If validation fails an Optout::OptionInvalid exception is raised. 
+  # An option's value can be restricted by a validation rule. If validation fails an Optout::OptionInvalid exception is raised.
   #
-  # Validation rules will only be applied if the option hash contains a non-nil value for the given option's key.    
+  # Validation rules will only be applied if the option hash contains a non-nil value for the given option's key.
   # If the option is required you must either define it in a Optout#required block or set the +:required+ option to +true+ when calling Optout#on.
   #
   # Validation rules can be in one of the following forms:
@@ -147,7 +147,7 @@ class Optout
   #
   # ==== Class
   #
-  # Must be an instance of the given class. 
+  # Must be an instance of the given class.
   #
   #  on :key, Fixnum
   #  on :key, "-switch", Fixnum
@@ -159,7 +159,7 @@ class Optout
   #  on :key, Optout::Boolean
   #  on :key, "-switch", Optout::Boolean
   #
-  # ==== Optout::File   
+  # ==== Optout::File
   #
   # Must be a file. Note that the file does not have to exist.
   #
@@ -190,10 +190,10 @@ class Optout
   #      end
   #    end
   #  end
-  # 
+  #
   #  on :key, MyValidator.new
   #  on :key, "-switch", MyValidator.new
- 
+
   def on(*args)
     key = args.shift
 
@@ -216,8 +216,8 @@ class Optout
   #
   # === Examples
   #
-  #  optz = Optout.options do 
-  #    optional do 
+  #  optz = Optout.options do
+  #    optional do
   #      on :ignore, "-i"
   #      on :recurse, "-r"
   #    end
@@ -230,17 +230,17 @@ class Optout
   end
 
   ##
-  # Create a set of options that are required. 
+  # Create a set of options that are required.
   #
-  # If any +required+ option is missing from the option hash passed to Optout#argv or Optout#shell an 
-  # <code>Optout::OptionRequired</code> exception is raised. 
+  # If any +required+ option is missing from the option hash passed to Optout#argv or Optout#shell an
+  # <code>Optout::OptionRequired</code> exception is raised.
   #
   # This can also be set on a per option basis, see Optout#on.
   #
   # === Examples
   #
-  #  optz = Optout.options do 
-  #    required do 
+  #  optz = Optout.options do
+  #    required do
   #      on :ignore, "-i"
   #      on :recurse, "-r"
   #    end
@@ -249,8 +249,16 @@ class Optout
   #  optz.required { on :path, Optout::File }
   #
 
-  def required(&block)    
+  def required(&block)
     @required_context.instance_eval(&block)
+  end
+
+  def [](name)
+    @options[name]
+  end
+
+  def []=(name, option)
+
   end
 
   ##
@@ -277,7 +285,7 @@ class Optout
   #    on :all,  "-a"
   #    on :size, "-b", /\A\d+\z/, :required => true
   #    on :file, Optout::File.under("/home/sshaw"), :default => "/home/sshaw/tmp"
-  #  end  
+  #  end
   #
   #  optz.shell(:all => true, :size => 1024, :file => "/home/sshaw/some file")
 
@@ -291,7 +299,7 @@ class Optout
   #
   # === Parameters
   #
-  # [options (Hash)] The options hash used to construct the +argv+ array. 
+  # [options (Hash)] The options hash used to construct the +argv+ array.
   #
   # === Returns
   #
@@ -303,7 +311,7 @@ class Optout
   # [Optout::OptionRequired] The option hash is missing a required value.
   # [Optout::OptionUnknown] The option hash contains an unknown key.
   # [Optout::OptionInvalid] The option hash contains a value the does not conform to the defined specification.
-  # 
+  #
   # === Examples
   #
   # Create <code>["--prefix='/sshaw/usr/lib'", "libssl2"]</code>
@@ -312,7 +320,7 @@ class Optout
   #    on :all,  "-a"
   #    on :size, "-b", /\A\d+\z/, :required => true
   #    on :file, Optout::File.under("/home/sshaw"), :default => "/home/sshaw/tmp"
-  #  end  
+  #  end
   #
   #  optz.argv(:lib      => "libssl2",
   #            :prefix   => "/sshaw/usr/lib")
@@ -322,7 +330,7 @@ class Optout
   end
 
   private
-  def create_options(options = {})    
+  def create_options(options = {})
     raise ArgumentError, "options must be a Hash" unless Hash === options
 
     argv = []
@@ -347,26 +355,26 @@ class Optout
     klass = self
     Class.new do
       define_method(:on) do |*args|
-        options = Hash === args.last ? args.pop.dup : {}        
+        options = Hash === args.last ? args.pop.dup : {}
         options.merge!(forced_options)
         args << options
         klass.on *args
       end
     end.new
   end
-  
+
   class Option
     attr :key
     attr :value
     attr :index
 
-    ##    
-    # Creates a subclass of +Option+ 
+    ##
+    # Creates a subclass of +Option+
     #
     # === Parameters
     #
     # [key     (Symbol)] The hash key that will be used to lookup and create this option.
-    # [switch  (String)] Optional. 
+    # [switch  (String)] Optional.
     # [config    (Hash)] Describe how to validate and create the option.
     #
     # === Examples
@@ -389,7 +397,7 @@ class Optout
           @joinon = String === options[:multiple] ? options[:multiple] : ","
           @index  = options[:index].to_i
           @separator = options[:arg_separator] || " "
-          
+
           @validators = []
           @validators << Validator::Required.new(options[:required])
           @validators << Validator::Multiple.new(options[:multiple])
@@ -482,12 +490,12 @@ class Optout
     def unix?
       RbConfig::CONFIG["host_os"] !~ /mswin|mingw|msys/i
     end
-    
+
     def normalize(value)
       value.respond_to?(:entries) ? value.entries.join(@joinon) : value.to_s.strip
     end
   end
-  
+
   module Validator	#:nodoc: all
     def self.for(setting)
       if setting.respond_to?(:validate!)
@@ -495,7 +503,7 @@ class Optout
       else
         # Load validator based on the setting's name or the name of its class
         # Note that on 1.9 calling class.name on anonymous classes (i.e., Class.new.new) returns nil
-        validator = setting.class.name.to_s  
+        validator = setting.class.name.to_s
         if validator == "Class"
           name = setting.name.to_s.split("::", 2)
           validator = name[1] if name[1] && name[0] == "Optout"
@@ -513,7 +521,7 @@ class Optout
     Base = Struct.new :setting
 
     # Checks for multiple values
-    class Multiple < Base  
+    class Multiple < Base
       def validate!(opt)
         if !opt.empty? && opt.value.respond_to?(:entries) && opt.value.entries.size > 1 && !multiple_values_allowed?
           raise OptionInvalid.new(opt.key, "multiple values are not allowed")
@@ -660,7 +668,7 @@ class Optout
     end
   end
 
-  
+
   #
   # The following are shortcuts and/or marker classes used by Optout's public. They enable Validator.for()
   # to load the appropriate validation class.
@@ -668,18 +676,18 @@ class Optout
 
   ##
   # <code>Optout::File</code> is a validaton rule that can be used to check that an option's value is a path to a file.
-  # By default <code>Optout::File</code> *does* *not* *check* that the file exists. Instead, it checks that the file's parent directory 
-  # exists. This is done so that you can validate a path that _will_ be created by the program the options are for. 
-  # If you do want the file to exist just call the +exists+ method. 
+  # By default <code>Optout::File</code> *does* *not* *check* that the file exists. Instead, it checks that the file's parent directory
+  # exists. This is done so that you can validate a path that _will_ be created by the program the options are for.
+  # If you do want the file to exist just call the +exists+ method.
   #
   # Validation rules can be combined:
   #
-  #  Optout.options do 
+  #  Optout.options do
   #    on :path, "--path", Optout::File.exists.under("/home").named(/\.txt$/)
   #  end
-  # 
+  #
   # To validate directories use Optout::Dir.
-  # 
+  #
   class File
     class << self
       Validator::File::RULES.each do |r|
@@ -688,7 +696,7 @@ class Optout
 
       ##
       # :singleton-method: under
-      # :call-seq: 
+      # :call-seq:
       #   under(path)
       #   under(Regexp)
       #
@@ -696,20 +704,20 @@ class Optout
       #
       # === Parameters
       #
-      # This can be a +String+ denoting the parent directory or a +Regexp+ to match the parent directory against. 
+      # This can be a +String+ denoting the parent directory or a +Regexp+ to match the parent directory against.
 
 
       ##
       # :singleton-method: named
-      # :call-seq: 
+      # :call-seq:
       #   named(basename)
       #   named(Regexp)
-      #  
+      #
       # The option's basename must match the given basename.
       #
       # === Parameters
       #
-      # A +String+ denoting the basename or a +Regexp+ to match the basename against. 
+      # A +String+ denoting the basename or a +Regexp+ to match the basename against.
 
 
       ##
@@ -717,21 +725,21 @@ class Optout
       # :call-seq:
       #  permissions(symbolic_mode)
       #
-      # The option's *user* *permissions* must match the given permission(s). 
+      # The option's *user* *permissions* must match the given permission(s).
       #
       #
       # === Parameters
       #
       # A <code>chmod(1)</code> symbolic mode +String+ denoting the desired permission(s).
-      # Any combination of <code>"r"</code>, <code>"w"</code> and <code>"x"</code> is supported. 
+      # Any combination of <code>"r"</code>, <code>"w"</code> and <code>"x"</code> is supported.
       #
-      # Note that permissions are system dependent, certain modes might not be supported by your OS. 
+      # Note that permissions are system dependent, certain modes might not be supported by your OS.
 
       ##
       #
-      # If +wanted+ is true the file must exist. 
+      # If +wanted+ is true the file must exist.
       #
-      def exists(wanted = true) 
+      def exists(wanted = true)
         proxy_for.new.exists(wanted)
       end
 
@@ -743,11 +751,11 @@ class Optout
 
   ##
   # <code>Optout::Dir</code> is a validaton rule that can be used to check that an option's value is a path to a directory.
-  # This class proivdes the same functionality for directories that Optout::File provides for files. See Optout::File for more info. 
+  # This class proivdes the same functionality for directories that Optout::File provides for files. See Optout::File for more info.
   #
-  # Validation rules can be combined: 
+  # Validation rules can be combined:
   #
-  #  Optout.options do 
+  #  Optout.options do
   #    on :path, "--path", Optout::Dir.exists.under("/tmp").named(/\d$/)
   #  end
   #
@@ -762,11 +770,10 @@ class Optout
   ##
   # <code>Optout::Boolean</code> is a validaton rule that can be used to check that an option's value is +true+ or +false+.
   #
-  #  Optout.options do 
+  #  Optout.options do
   #    on :force, "-f", Optout::Boolean
   #  end
 
   class Boolean
   end
 end
-
