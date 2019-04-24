@@ -128,20 +128,15 @@ Options can be grouped into required and optional:
 
 == More Info
 
-=== RDoc
-
-http://www.ruby-doc.org/gems/docs/o/optout-0.0.2
-
-=== Bugs
-
-https://github.com/sshaw/optout/issues
+* {RDoc}[https://rdoc.info/gems/optout]
+* {Bugs}[https://github.com/sshaw/optout/issues]
 
 == Author
 
-Skye Shaw [sshaw AT lucas.cis.temple.edu]
+Skye Shaw [skye.shaw AT gmail]
 
 == License
 
-Copyright (c) 2011-2012 Skye Shaw
+Copyright (c) 2011-2019 Skye Shaw
 
 Released under the MIT License: http://www.opensource.org/licenses/MIT
